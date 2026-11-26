@@ -152,7 +152,8 @@ function makingHtml(m) {
       <div class="keepActs"><button class="btn save" data-act="save">Save as App</button><span class="link" role="button" tabindex="0" data-act="discard">Discard</span></div>`;
     h += `<div class="meta">${m.model ? esc(modelName(m.model)) + " · " : ""}${m.minutes} min · ${m.step} steps${m.usd != null ? " · $" + Number(m.usd).toFixed(2) : ""}<span class="grow"></span><span class="link" role="button" tabindex="0" data-act="code">Show code</span></div>`;
   } else if (m.phase === "failed") {
-    h += `<p class="bad">${esc(m.error || "It stopped.")}</p><p class="meta">${m.kind === "change" ? "Nothing changed in your app." : "Nothing was installed."}</p>`;
+    const limit = String(m.error || "").startsWith("[limit] ");
+    h += `<p class="bad">${limit ? "<b>Spending limit reached.</b> " : ""}${esc(String(m.error || "It stopped.").replace(/^\[limit\] /, ""))}</p><p class="meta">${m.kind === "change" ? "Nothing changed in your app." : "Nothing was installed."}</p>`;
   } else if (m.phase === "stopped") {
     h += `<p class="meta">Stopped. ${m.kind === "change" ? "Nothing changed in your app." : "Nothing was installed."}</p>`;
   } else {

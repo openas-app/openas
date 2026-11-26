@@ -58,6 +58,43 @@ pub(super) fn ledger_path() -> PathBuf {
     ledger_dir().join("spend.json")
 }
 
+/// "2026-11" for a Unix time, in UTC (civil-from-days, Howard Hinnant).
+pub(super) fn month_of(t: u64) -> String {
+    let z = (t / 86_400) as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y}-{m:02}")
+}
+
+/// What was spent this calendar month, from the per-step log. A log that
+/// exists but can't be read counts as over any limit.
+pub fn spent_this_month() -> f64 {
+    let Ok(text) = std::fs::read_to_string(ledger_dir().join("spend.jsonl")) else {
+        return 0.0;
+    };
+    let month = month_of(now());
+    text.lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .filter(|v| v["t"].as_u64().is_some_and(|t| month_of(t) == month))
+        .filter_map(|v| v["usd"].as_f64())
+        .sum()
+}
+
+/// The limits in force: the person's settings, unless the environment
+/// overrides them (tests and comparisons do).
+pub fn limits() -> (f64, f64) {
+    let s = crate::model::settings();
+    (
+        env_f("OPENAS_SPEND_CAP", s.monthly_limit),
+        env_f("OPENAS_APP_CAP", s.app_limit),
+    )
+}
+
 /// The total so far. A ledger that exists but can't be read stops spending
 /// (counts as over any cap) rather than starting again at zero.
 pub fn spent() -> (f64, Value) {
@@ -104,4 +141,17 @@ pub(super) fn add_spend(job: &str, dollars: f64, usage: &Value) -> Result<f64> {
         .open(ledger_dir().join("spend.jsonl"))?;
     writeln!(f, "{line}")?;
     Ok(j)
+}
+
+#[cfg(test)]
+mod month_tests {
+    use super::month_of;
+
+    #[test]
+    fn months_fall_on_calendar_boundaries() {
+        assert_eq!(month_of(0), "1970-01");
+        assert_eq!(month_of(1_709_164_800), "2024-02"); // 29 Feb 2024
+        assert_eq!(month_of(1_709_251_200), "2024-03"); // 1 Mar 2024, 00:00 UTC
+        assert_eq!(month_of(1_798_675_200 - 1), "2026-12");
+    }
 }

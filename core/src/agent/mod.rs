@@ -17,6 +17,13 @@ use serde_json::{json, Value};
 use crate::claude::{self, Claude, Ev};
 use crate::{check, keys, make, paths};
 
+/// Pulls the "doing" line out of a tool call while it is still streaming.
+pub(super) static DOING_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(r#""doing"\s*:\s*"((?:[^"\\]|\\.)*)""#).expect("valid regex")
+});
+/// Starts a spending-limit error, so the column can offer a way out.
+pub const LIMIT_MARK: &str = "[limit]";
+
 pub(super) const BUILDER: &str = include_str!("../../prompts/builder.md");
 pub const MODEL_DEFAULT: &str = "claude-opus-5-5";
 pub(super) fn model() -> String {
@@ -24,10 +31,6 @@ pub(super) fn model() -> String {
 }
 /// The last backstop. A build normally ends long before: it finishes, or
 /// the progress checks below see it going in circles.
-/// Pulls the "doing" line out of a tool call while it is still streaming.
-pub(super) static DOING_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
-    regex::Regex::new(r#""doing"\s*:\s*"((?:[^"\\]|\\.)*)""#).expect("valid regex")
-});
 pub(super) const MAX_TURNS: usize = 200;
 /// The same failing tool call this many times in a row: a nudge, then stop.
 pub(super) const SAME_FAIL_NUDGE: usize = 3;
@@ -69,7 +72,7 @@ mod turn;
 
 pub use draft::{change, make_run, new_draft, prepare_draft, start_make};
 pub use live::Live;
-pub use spend::{estimate, spent};
+pub use spend::{estimate, limits, spent, spent_this_month};
 pub use turn::run;
 
 // The modules share their helpers with each other through here.

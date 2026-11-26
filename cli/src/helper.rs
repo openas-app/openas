@@ -252,10 +252,6 @@ pub enum Request {
         #[serde(default)]
         name: String,
     },
-    Estimate {
-        provider: String,
-        model: String,
-    },
     Models {
         provider: String,
         #[serde(default)]
@@ -272,6 +268,11 @@ pub enum Request {
         provider: Option<String>,
         #[serde(default)]
         build_model: Option<String>,
+    },
+    /// The spending limits, in dollars: per calendar month and per app.
+    LimitsSet {
+        monthly: f64,
+        per_app: f64,
     },
     Usage,
 }
@@ -295,10 +296,10 @@ impl Request {
             Request::Settings => "settings",
             Request::SharePeek { .. } => "share_peek",
             Request::ShareInstall { .. } => "share_install",
-            Request::Estimate { .. } => "estimate",
             Request::Models { .. } => "models",
             Request::Connect { .. } => "connect",
             Request::SettingsSet { .. } => "settings_set",
+            Request::LimitsSet { .. } => "limits_set",
             Request::Usage => "usage",
         }
     }
@@ -436,7 +437,8 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
                     .any(|p| p["id"] == json!(s.provider) && p["has_key"] == json!(true));
             Ok(
                 json!({ "provider": s.provider, "build_model": s.build_model, "providers": providers, "ready": ready,
-                       "first_run": !configured, "estimate": openas_core::agent::estimate(&s.provider, &s.build_model) }),
+                       "first_run": !configured, "monthly_limit": s.monthly_limit, "app_limit": s.app_limit,
+                       "spent_this_month": openas_core::agent::spent_this_month() }),
             )
         }
         Request::SharePeek { file } => {
@@ -454,9 +456,6 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
                     .status();
             }
             Ok(json!({ "id": info.id, "name": info.name }))
-        }
-        Request::Estimate { provider, model } => {
-            Ok(json!({ "estimate": openas_core::agent::estimate(&provider, &model) }))
         }
         Request::Models { provider, key } => {
             // The ids a provider offers, with this key (or the saved one); never the key itself.
@@ -530,6 +529,16 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
             if let Some(m) = build_model {
                 s.build_model = m;
             }
+            model::save_settings(&s)?;
+            Ok(json!({ "saved": true }))
+        }
+        Request::LimitsSet { monthly, per_app } => {
+            if !(monthly.is_finite() && per_app.is_finite() && monthly > 0.0 && per_app > 0.0) {
+                bail!("limits must be more than $0");
+            }
+            let mut s = model::settings();
+            s.monthly_limit = monthly;
+            s.app_limit = per_app;
             model::save_settings(&s)?;
             Ok(json!({ "saved": true }))
         }

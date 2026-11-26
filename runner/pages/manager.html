@@ -63,14 +63,23 @@ textarea::placeholder{color:var(--faint)}
 .prov{font:inherit;font-size:12.5px;cursor:default;padding:4px 11px;border:1px solid var(--line);border-radius:999px;color:var(--mute);background:transparent}
 .prov:hover{color:var(--fg)}.prov.on{color:var(--on-accent);border-color:var(--accent);background:var(--accent)}
 .list{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden}
-.opt{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:12px;width:100%;padding:13px 16px;border:0;border-top:1px solid var(--line2);background:transparent;color:var(--fg);font:inherit;text-align:left;cursor:default}
+.opt{display:grid;grid-template-columns:18px 1fr;align-items:center;gap:12px;width:100%;padding:13px 16px;border:0;border-top:1px solid var(--line2);background:transparent;color:var(--fg);font:inherit;text-align:left;cursor:default}
 .opt:first-child{border-top:0}
 .opt:hover{background:color-mix(in srgb,var(--line2) 60%,transparent)}
 .opt .dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--faint)}
 .opt.on .dot{border:5px solid var(--accent)}
 .opt b{font-weight:500;font-size:13.5px}.opt small{display:block;color:var(--mute);font-size:12px;margin-top:1px}
-.opt .price{color:var(--mute);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
-.opt.on .price{color:var(--fg)}
+/* Spending limits, under the model choice */
+.spend{margin-top:28px;padding-top:18px;border-top:1px solid var(--line)}
+.spend .sh{display:flex;align-items:baseline;gap:10px;font-size:13px}
+.spend .sh b{font-weight:600}.spend .sh span{color:var(--mute);font-variant-numeric:tabular-nums}
+.spend .link{color:var(--fg);text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line)}
+.spend .sf{display:flex;align-items:flex-end;gap:12px;margin-top:12px;flex-wrap:wrap}
+.spend label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mute)}
+.spend .usd{display:flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:11px;background:var(--card);padding:0 10px}
+.spend .usd:focus-within{border-color:var(--accent)}
+.spend input{width:72px;font:13px "Inter",-apple-system,system-ui;color:var(--fg);background:transparent;border:0;padding:8px 0;outline:0;font-variant-numeric:tabular-nums;-webkit-user-select:text;user-select:text}
+.spend .go{padding:8px 16px}
 .opt input{margin-top:6px;width:100%;font:13px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 8px;outline:0;-webkit-user-select:text;user-select:text}
 .opt input:focus{border-color:var(--accent)}
 .keyline{display:flex;align-items:center;gap:10px;margin-top:14px;color:var(--mute);font-size:12.5px}
@@ -94,8 +103,17 @@ textarea::placeholder{color:var(--faint)}
   <div class="keyline" id="keyLine"></div>
   <div class="hint" id="hint"></div>
   <button class="go cont" id="connect">Continue</button>
-  <div class="foot2"><span id="note">A change costs about the same as a new app.</span><span class="back" id="back" role="button" tabindex="0">Back</span></div>
+  <div class="foot2"><span id="note">You see what each app cost when it's done.</span><span class="back" id="back" role="button" tabindex="0">Back</span></div>
   <div class="msg" id="cs"></div>
+  <section class="spend" aria-label="Spending">
+    <div class="sh"><b>Spending</b><span id="spNow"></span><span class="grow"></span><span class="link" id="spEdit" role="button" tabindex="0">Change limits</span></div>
+    <div class="sf" id="spForm" hidden>
+      <label>Per month<span class="usd">$<input id="limM" type="number" min="1" step="1" aria-label="Limit per month in dollars"></span></label>
+      <label>Per app<span class="usd">$<input id="limA" type="number" min="1" step="1" aria-label="Limit per app in dollars"></span></label>
+      <button class="go" id="limSave">Save</button>
+    </div>
+    <div class="hint" id="spHint">Building stops at these limits, so a build that goes wrong can't keep spending. Models on this Mac are free and have no limit.</div>
+  </section>
 </div>
 </main>
 <div class="veil" id="shareVeil" hidden><div class="sheet" role="dialog" aria-label="Shared app">
@@ -110,7 +128,7 @@ textarea::placeholder{color:var(--faint)}
 <p class="lead">Describe it. It's built as an app on your Mac, and you can change it later by asking.</p>
 <div class="composer">
   <textarea id="t" autofocus placeholder="An app that…"></textarea>
-  <div class="foot"><span class="pill" id="pill" role="button" tabindex="0" title="Choose who builds your apps"><span class="dot"></span><span id="pillText"></span></span><span class="grow"></span><span class="cost" id="cost"></span><button class="go" id="g" disabled>Make app</button></div>
+  <div class="foot"><span class="pill" id="pill" role="button" tabindex="0" title="Choose who builds your apps"><span class="dot"></span><span id="pillText"></span></span><span class="grow"></span><button class="go" id="g" disabled>Make app</button></div>
 </div>
 <div class="msg" id="s"></div>
 <div class="ideas" id="ideas"></div>
@@ -166,24 +184,33 @@ const CLAUDE = { "claude-opus-5-5": "Claude Opus 5.5", "claude-sonnet-5-5": "Cla
 // Suggested models per provider, with a few words each; "other" lets you type any id.
 const SUGGEST = {
   anthropic: [["claude-opus-5-5", "Opus 5.5", "The best apps"], ["claude-sonnet-5-5", "Sonnet 5.5", "Nearly as good, half the price"], ["claude-haiku-5-5", "Haiku 5.5", "Quick and cheap, for small tools"]],
-  huggingface: [["deepseek-ai/DeepSeek-V4.1-Flash:cheapest", "DeepSeek V4.1 Flash", "Fast and good all round"], ["zai-org/GLM-5.3:cheapest", "GLM 5.3", "Can't look at screenshots while checking"], ["moonshotai/Kimi-K3.1-Pro:cheapest", "Kimi K3.1 Pro", "The most polished open model"]],
-  openrouter: [["deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", "Fast and good all round"], ["z-ai/glm-5.3", "GLM 5.3", "Can't look at screenshots while checking"], ["moonshotai/kimi-k3.1-pro", "Kimi K3.1 Pro", "The most polished open model"]],
+  huggingface: [["deepseek-ai/DeepSeek-V4.1-Flash:cheapest", "DeepSeek V4.1 Flash", "Experimental: careful, but may not finish"], ["zai-org/GLM-5.3:cheapest", "GLM 5.3", "Experimental: can't look at screenshots while checking"]],
+  openrouter: [["deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", "Experimental: careful, but may not finish"], ["z-ai/glm-5.3", "GLM 5.3", "Experimental: can't look at screenshots while checking"]],
 };
 const ORDER = ["anthropic", "openrouter", "huggingface", "together", "groq", "fireworks", "ollama", "lmstudio", "vllm"];
 const nice = m => CLAUDE[m] || String(m || "").split(":")[0].split("/").pop();
 const usd = x => x >= 10 ? "$" + x.toFixed(0) : x >= 1 ? "$" + x.toFixed(2) : x > 0 ? Math.max(1, Math.round(x * 100)) + "¢" : "free";
 const prov = id => S && S.providers.find(p => p.id === id);
-const priceOf = e => !e ? "price unknown" : e.high === 0 ? "free" : "about " + usd(e.typical) + " an app";
-const estCache = {};
-async function est(p, m) {
-  const k = p + "|" + m; if (!(k in estCache)) { const r = await run({ op: "estimate", provider: p, model: m }); estCache[k] = r.ok ? r.ok.estimate : null; }
-  return estCache[k];
+const dollars = x => "$" + (Number(x) || 0).toFixed(2).replace(/\.00$/, "");
+function drawSpend() {
+  $("spNow").textContent = "This month " + dollars(S.spent_this_month) + " of " + dollars(S.monthly_limit) + " · " + dollars(S.app_limit) + " per app";
+  $("limM").value = Math.round(S.monthly_limit); $("limA").value = Math.round(S.app_limit);
 }
+$("spEdit").onclick = () => { $("spForm").hidden = !$("spForm").hidden; if (!$("spForm").hidden) $("limM").focus(); };
+$("limSave").onclick = async () => {
+  const monthly = Number($("limM").value), per_app = Number($("limA").value);
+  if (!(monthly > 0 && per_app > 0)) { $("spHint").textContent = "Both limits need to be more than $0."; return; }
+  const r = await run({ op: "limits_set", monthly, per_app });
+  if (r.error) { $("spHint").textContent = r.error; return; }
+  await loadSettings(); drawSpend(); $("spForm").hidden = true;
+  $("spHint").textContent = "Saved. Building stops at these limits, so a build that goes wrong can't keep spending.";
+};
 function showSetup(first) {
   $("home").hidden = true; $("setup").hidden = false; $("back").hidden = !!first; $("cs").textContent = ""; replacing = false;
   $("connect").textContent = makeAfter ? "Continue and make the app" : "Continue";
   const p = prov(S.provider) || prov("anthropic");
   pick(p.kind || "claude", p.id, S.build_model);
+  drawSpend(); $("spForm").hidden = true;
 }
 function pick(k, provider, m) {
   kind = k;
@@ -200,15 +227,15 @@ function drawProvider() {
   const p = prov(provId), rows = SUGGEST[provId] || [];
   if (!rows.some(r => r[0] === model) && !(model && p.id === S.provider)) model = rows.length ? rows[0][0] : "";
   const other = !rows.some(r => r[0] === model);
-  let h = rows.map(([id, name, what]) => `<button class="opt${id === model ? " on" : ""}" role="radio" data-m="${id}"><span class="dot"></span><span><b>${name}</b><small>${what}</small></span><span class="price" data-p="${id}"></span></button>`).join("");
-  if (p.kind !== "claude") h += `<div class="opt${other ? " on" : ""}" role="radio" data-m=""><span class="dot"></span><span><b>${rows.length ? "Another model" : "Model"}</b><small>${p.kind === "local" ? "The model's name, as " + p.name + " lists it" : "Any model id " + p.name + " offers"}</small>${other ? `<input id="mdl" spellcheck="false" placeholder="${p.kind === "local" ? "e.g. qwen3-coder" : "Model id"}" value="${other ? esc(model) : ""}">` : ""}</span><span class="price" data-p="${other ? esc(model) : ""}"></span></div>`;
+  let h = rows.map(([id, name, what]) => `<button class="opt${id === model ? " on" : ""}" role="radio" data-m="${id}"><span class="dot"></span><span><b>${name}</b><small>${what}</small></span></button>`).join("");
+  if (p.kind !== "claude") h += `<div class="opt${other ? " on" : ""}" role="radio" data-m=""><span class="dot"></span><span><b>${rows.length ? "Another model" : "Model"}</b><small>${p.kind === "local" ? "The model's name, as " + p.name + " lists it" : "Any model id " + p.name + " offers"}</small>${other ? `<input id="mdl" spellcheck="false" placeholder="${p.kind === "local" ? "e.g. qwen3-coder" : "Model id"}" value="${other ? esc(model) : ""}">` : ""}</span></div>`;
   $("opts").innerHTML = h;
   $("opts").querySelectorAll(".opt").forEach(o => o.onclick = e => {
     if (e.target.tagName === "INPUT") return;
     if (o.dataset.m) model = o.dataset.m; else if (!other) model = "";
     drawProvider(); if (!o.dataset.m && $("mdl")) $("mdl").focus();
   });
-  if ($("mdl")) $("mdl").oninput = () => { model = $("mdl").value.trim(); fillPrices(); };
+  if ($("mdl")) $("mdl").oninput = () => { model = $("mdl").value.trim(); };
   // The key: one line when it's saved; a field when it's missing or being replaced.
   const k = $("keyLine"); k.hidden = !p.needs_key;
   if (p.needs_key) k.innerHTML = p.has_key && !replacing
@@ -217,16 +244,6 @@ function drawProvider() {
   if ($("replace")) $("replace").onclick = () => { replacing = true; drawProvider(); $("key").focus(); };
   $("hint").textContent = p.kind === "local" ? "Start " + p.name + " first. Building an app takes a capable model that can use tools: a 30B coding model or larger works best." : "";
   $("hint").hidden = !$("hint").textContent;
-  fillPrices();
-}
-async function fillPrices() {
-  const p = prov(provId);
-  for (const el of $("opts").querySelectorAll(".price")) {
-    const m = el.closest(".opt").dataset.m || ($("mdl") ? model : "");
-    if (!m) { el.textContent = p.kind === "local" ? "free" : ""; continue; }
-    if (p.kind === "local") { el.textContent = "free"; continue; }
-    const e = await est(p.id, m); if (el.isConnected) el.textContent = priceOf(e);
-  }
 }
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { replacing = false; pick(b.dataset.kind); });
@@ -249,7 +266,6 @@ async function loadSettings() {
   const p = prov(S.provider);
   $("pillText").textContent = S.ready ? nice(S.build_model) + (p && p.kind !== "claude" ? " · " + p.name : "") : "Choose a model";
   $("pill").classList.toggle("unset", !S.ready);
-  $("cost").textContent = !S.ready ? "" : p && p.kind === "local" ? "free" : S.estimate ? (S.estimate.high === 0 ? "free" : "about " + usd(S.estimate.typical) + " an app") : "";
   if ($("setup").hidden) $("home").hidden = false;
 }
 // ---- Shared apps someone sent (opened with OpenAs) ---------------------------

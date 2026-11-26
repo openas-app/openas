@@ -52,8 +52,13 @@ What an app costs, measured on real builds:
 | Open models (DeepSeek, GLM) | experimental: 25¢ to 45¢, but they often run long and don't always finish |
 | A model on your Mac | free |
 
-A change costs about the same as a new app. Spending stops at a cap
-($180 in total and $40 per app by default).
+These are rough: prices change, and the same app can take more or fewer steps.
+OpenAs shows what each app actually cost when it's done. A change costs about
+the same as a new app.
+
+Building stops at two limits you set under **Spending** (click the model name
+under the text box): $50 a month and $10 per app by default. They're there so a
+build that goes wrong can't keep spending. Models on your Mac have no limit.
 
 ## What apps may do
 

@@ -64,6 +64,11 @@ pub(super) enum Backend {
 }
 
 impl Backend {
+    /// A model running on this Mac: its price is zero.
+    fn is_free(&self) -> bool {
+        matches!(self, Backend::Open(o) if o.price == (0.0, 0.0))
+    }
+
     fn for_model(m: &str) -> Result<Self> {
         if m.starts_with("claude-") {
             let key = crate::model::key_for("anthropic", "ANTHROPIC_API_KEY")
@@ -116,9 +121,10 @@ pub(super) fn run_live(
     ev: &make::Events,
     live: &Live,
 ) -> Result<Finished> {
-    let cap = env_f("OPENAS_SPEND_CAP", 180.0);
-    let app_cap = env_f("OPENAS_APP_CAP", 40.0);
+    let (cap, app_cap) = limits();
     let client = Backend::for_model(&model())?;
+    // A model on this Mac costs nothing, so no limit applies to it.
+    let free = client.is_free();
     std::fs::create_dir_all(ws.join("app"))?;
     let log_path = ws.join("agent.jsonl");
     let log = |v: &Value| {
@@ -153,12 +159,12 @@ pub(super) fn run_live(
             bail!("Stopped.");
         }
         live.set_now("step", json!(turn));
-        let (total, _) = spent();
-        if total >= cap {
-            bail!("spend cap reached (${total:.2} of ${cap:.0}); stopped before turn {turn}");
+        let month = spent_this_month();
+        if !free && month >= cap {
+            bail!("{LIMIT_MARK} You've reached this month's spending limit (${month:.2} of ${cap:.2}). Raise it in OpenAs: click the model name under the text box, then Spending.");
         }
-        if job_spent >= app_cap {
-            bail!("this app's cap reached (${job_spent:.2} of ${app_cap:.2}); stopped before turn {turn}");
+        if !free && job_spent >= app_cap {
+            bail!("{LIMIT_MARK} This app reached its spending limit (${job_spent:.2} of ${app_cap:.2}). Raise it in OpenAs: click the model name under the text box, then Spending.");
         }
         let mut tools = tool_schemas();
         // Big file contents stream as they're written, not in one burst at the end.
@@ -232,9 +238,9 @@ pub(super) fn run_live(
         job_spent = add_spend(job, dollars, &t.usage)?;
         usd += dollars;
         live.set("usd", json!((usd * 100.0).round() / 100.0));
-        let (total, _) = spent();
         (ev.say)(&format!(
-            "Step {turn} done · this app ${job_spent:.2} · all ${total:.2}"
+            "Step {turn} done · this app ${job_spent:.2} · this month ${:.2}",
+            spent_this_month()
         ));
         log(
             &json!({ "turn": turn, "stop": t.stop_reason, "usd": dollars, "usage": t.usage,

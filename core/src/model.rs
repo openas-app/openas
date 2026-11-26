@@ -50,10 +50,25 @@ pub struct Settings {
     /// file; some endpoints cap it lower, so it is a setting.
     #[serde(default = "default_max_tokens")]
     pub max_tokens: u32,
+    /// Spending stops for the rest of the calendar month at this many
+    /// dollars. It catches a build that runs away; the person sets it.
+    #[serde(default = "default_monthly_limit")]
+    pub monthly_limit: f64,
+    /// One app (or one change) stops at this many dollars.
+    #[serde(default = "default_app_limit")]
+    pub app_limit: f64,
 }
 
 fn default_max_tokens() -> u32 {
     48_000
+}
+
+fn default_monthly_limit() -> f64 {
+    50.0
+}
+
+fn default_app_limit() -> f64 {
+    10.0
 }
 
 impl Default for Settings {
@@ -62,6 +77,8 @@ impl Default for Settings {
             provider: "anthropic".into(),
             build_model: "claude-opus-5-5".into(),
             max_tokens: default_max_tokens(),
+            monthly_limit: default_monthly_limit(),
+            app_limit: default_app_limit(),
         }
     }
 }
