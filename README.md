@@ -1,6 +1,6 @@
 # OpenAs
 
-[![CI](https://github.com/OWNER/openas/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/openas/actions/workflows/ci.yml)
+[![CI](https://github.com/openas-app/openas/actions/workflows/ci.yml/badge.svg)](https://github.com/openas-app/openas/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
 **Describe an app. A model builds it, and it installs as a real Mac app.**
@@ -22,7 +22,7 @@ Status: early. macOS only for now.
 You need Rust ([rustup.rs](https://rustup.rs)) and Apple's command line tools
 (`xcode-select --install`). Then:
 
-    git clone https://github.com/OWNER/openas && cd openas && ./install.sh
+    git clone https://github.com/openas-app/openas && cd openas && ./install.sh
 
 The first build takes a few minutes. OpenAs then opens from `~/Applications`.
 
