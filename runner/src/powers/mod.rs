@@ -21,7 +21,7 @@ use tauri::tray::{TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 
-use crate::App;
+use crate::{App, Who};
 
 /// The powers a page may ask for, with how the ask names them.
 pub const KNOWN: &[(&str, &str)] = &[

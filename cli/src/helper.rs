@@ -194,6 +194,10 @@ fn b64(bytes: &[u8]) -> String {
     out
 }
 
+fn yes() -> bool {
+    true
+}
+
 /// One request to the Helper, as its `op` names it. Unknown fields are
 /// ignored; a missing one is an error before anything runs.
 #[derive(Debug, serde::Deserialize)]
@@ -203,6 +207,10 @@ pub enum Request {
     /// in its own window while it's made.
     Make {
         request: String,
+        /// Open the separate making window. OpenAs's own window sends false:
+        /// it shows the draft in place.
+        #[serde(default = "yes")]
+        window: bool,
     },
     /// Built as a draft; it becomes an app with `Install`.
     New {
@@ -343,8 +351,8 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
         bail!("not allowed: {op}");
     }
     match req {
-        Request::Make { request } => {
-            let ws = openas_core::agent::start_make(&request, &std::env::current_exe()?)?;
+        Request::Make { request, window } => {
+            let ws = openas_core::agent::start_make(&request, &std::env::current_exe()?, window)?;
             Ok(json!({ "draft": ws.file_name().map(|f| f.to_string_lossy().into_owned()) }))
         }
         Request::New { prompt } => {

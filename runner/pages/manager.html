@@ -4,38 +4,39 @@
 @media (prefers-color-scheme:dark){:root{--bg:#0B0B0C;--card:#161618;--fg:#F4F4F5;--mute:#A1A1AA;--faint:#71717A;--line:#2E2E33;--line2:#232326;--accent:#FFFFFF;--on-accent:#0B0B0C;--signal:#FF4A1C;--bad:#E0785E;--seg-on:#3A3A40;--shadow:0 1px 2px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.35)}}
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font:13px/1.45 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;-webkit-font-smoothing:antialiased;cursor:default;-webkit-user-select:none;user-select:none}
-main{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:64px 40px 26px}
+main{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:92px 32px 24px}
+.topbar{position:fixed;top:0;left:0;right:0;height:52px;display:flex;align-items:center;padding-left:84px;z-index:4;background:var(--bg)}
+.wm{font:700 15px/20px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.02em}.wm i{font-style:normal;color:var(--signal)}.wm span{font-weight:500}
 h1{font:700 30px/1.07 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.035em;margin:0 0 8px;text-align:center}
-.lead{color:var(--mute);margin:0 0 22px;font-size:14px;text-align:center}
+.lead{color:var(--mute);margin:0 0 24px;font-size:15px;line-height:22px;text-align:center}
 .composer{width:min(640px,100%);background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:16px 16px 12px}
 .composer:focus-within{border-color:color-mix(in srgb,var(--accent) 50%,var(--line))}
-textarea{display:block;width:100%;border:0;outline:0;resize:none;background:transparent;color:var(--fg);font:15.5px/1.5 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:72px;max-height:240px;padding:0;-webkit-user-select:text;user-select:text}
+textarea{display:block;width:100%;border:0;outline:0;resize:none;background:transparent;color:var(--fg);font:15px/22px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:72px;max-height:240px;padding:0;-webkit-user-select:text;user-select:text}
 textarea::placeholder{color:var(--faint)}
 .foot{display:flex;align-items:center;gap:10px;margin-top:10px}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--line2);color:var(--mute);font-size:12px}
 .pill .dot{width:7px;height:7px;border-radius:0;background:var(--signal)}
 .pill.unset{color:var(--fg)}.pill.unset .dot{background:var(--faint)}
 .grow{flex:1}
-.go{font:600 13.5px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:8px 16px;border-radius:11px;border:0;background:var(--accent);color:var(--on-accent);cursor:default}
+.go{font:600 15px/20px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:44px;padding:0 18px;border-radius:11px;border:0;background:var(--accent);color:var(--on-accent);cursor:default}
 .go:disabled{opacity:.45}
-@media (prefers-color-scheme:dark){.go{color:#10241a}}
-.msg{min-height:18px;margin-top:8px;color:var(--mute);font-size:12.5px;text-align:center}.msg.bad{color:var(--bad)}
+.msg{min-height:18px;margin-top:12px;color:var(--mute);font-size:13px;line-height:18px;text-align:center}.msg.bad{color:var(--bad)}
 .ideas{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:min(640px,100%);margin:6px 0 0}
-.idea{padding:6px 11px;border:1px solid var(--line);border-radius:999px;color:var(--mute);font-size:12.5px}
+.idea{padding:6px 12px;border:1px solid var(--line);border-radius:999px;color:var(--mute);font-size:13px;line-height:18px}
 .idea:hover{color:var(--fg);border-color:var(--faint)}
 .shelf{width:min(640px,100%);margin-top:48px}
-.shelf h2{font-size:12px;font-weight:600;color:var(--mute);margin:0 0 12px}
-.apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px}
-.app{display:flex;flex-direction:column;align-items:center;gap:7px;padding:12px 4px;border-radius:12px;text-align:center}
+.shelf h2{font-size:15px;line-height:20px;font-weight:600;color:var(--fg);margin:0 0 12px}
+.apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.app{display:flex;flex-direction:column;align-items:center;gap:7px;padding:16px 8px;border-radius:20px;text-align:center}
 .app:hover{background:var(--line2)}
 .app img,.app .ph{width:64px;height:64px;border-radius:15px}
 .app .ph{border:1.5px dashed var(--line);display:grid;place-items:center}
 .app .ph i{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.app span{font-size:12.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app span{font-size:13px;line-height:18px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .app small{font-size:11px;color:var(--faint);margin-top:-5px}
 .empty{color:var(--faint);grid-column:1/-1;padding:8px 0}
-.note{margin-top:auto;padding-top:40px;color:var(--faint);font-size:11.5px;text-align:center}
+.note{margin-top:auto;padding-top:40px;color:var(--mute);font-size:13px;line-height:18px;text-align:center}
 .pill{cursor:default}.pill:hover{color:var(--fg)}
 .cost{color:var(--faint);font-size:12px;font-variant-numeric:tabular-nums}
 [hidden]{display:none!important}
@@ -49,7 +50,7 @@ textarea::placeholder{color:var(--faint)}
 .sheet .from{color:var(--mute);font-size:12.5px;margin-top:2px}
 .sheet .safe{margin:16px 0 0;padding:11px 12px;border-radius:10px;background:var(--line2);color:var(--mute);font-size:12.5px;line-height:1.45}
 .sheet .row2{display:flex;align-items:center;gap:12px;margin-top:16px}
-.sheet pre{margin:12px 0 0;max-height:240px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font:11.5px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;-webkit-user-select:text;user-select:text}
+.sheet pre{margin:12px 0 0;max-height:240px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font:500 12px/18px "JetBrains Mono",ui-monospace,Menlo,monospace;white-space:pre-wrap;-webkit-user-select:text;user-select:text}
 .sheet .tabs{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
 .sheet .tabs span{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--mute)}
 .sheet .tabs span.on{color:var(--fg);border-color:var(--accent)}
@@ -91,6 +92,7 @@ textarea::placeholder{color:var(--faint)}
 .foot2{display:flex;justify-content:space-between;margin-top:10px;color:var(--faint);font-size:12px}
 .back{color:var(--mute)}.back:hover{color:var(--fg)}.back:hover{color:var(--fg)}
 </style></head><body>
+<div class="topbar" data-tauri-drag-region><div class="wm" data-tauri-drag-region>OpenAs</div></div>
 <main id="setup" hidden>
 <h1>Choose who builds your apps</h1>
 <p class="lead">OpenAs uses a model you bring. Your key stays in your Mac's Keychain.</p>
@@ -142,16 +144,24 @@ const run = req => new Promise(async res => {
   catch (e) { res({ error: String(e) }); }
 });
 const day = t => { if (!t) return ""; const d = new Date(t * 1000); return new Date().toDateString() === d.toDateString() ? "Today" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" }); };
-let making = [];
+// Back from an app being made: the shelf again, and what happened to it.
+window.__home = note => {
+  if (note && note.saved) { $("s").className = "msg"; $("s").textContent = note.saved + " is in your Applications. It's opening now."; }
+  load();
+};
 async function load() {
   const r = await run({ op: "list" });
   if (r.error) { $("s").className = "msg bad"; $("s").textContent = "OpenAs couldn't start its helper: " + r.error; return; }
   const apps = ((r.ok && r.ok.apps) || []).sort((a, b) => (b.created || 0) - (a.created || 0));
-  making = making.filter(m => Date.now() - m.t < 3600e3 && !apps.some(a => (a.created || 0) * 1000 >= m.t - 5000));
+  const drafts = await oa.drafts().catch(() => []);
   const L = $("list"); L.innerHTML = "";
-  for (const m of making) {
+  for (const m of drafts) {
     const d = document.createElement("div"); d.className = "app"; d.title = m.request;
-    d.innerHTML = '<div class="ph"><i></i></div><span></span><small>Being made</small>'; d.querySelector("span").textContent = m.request;
+    const done = m.phase === "done", stuck = m.phase === "failed" || m.phase === "stopped";
+    d.innerHTML = '<div class="ph">' + (done || stuck ? "" : "<i></i>") + '</div><span></span><small></small>';
+    d.querySelector("span").textContent = m.name || m.request;
+    d.querySelector("small").textContent = done ? "Ready to save" : stuck ? "Didn't finish" : "Being made";
+    d.onclick = () => oa.showDraft(m.id);
     L.append(d);
   }
   for (const a of apps) {
@@ -172,11 +182,12 @@ $("g").onclick = async () => {
   const request = $("t").value.trim(); if (!request) return;
   // No model yet: choose one, then the app is made straight after.
   if (S && !S.ready) { makeAfter = true; showSetup(false); return; }
-  $("g").disabled = true; $("s").className = "msg"; $("s").textContent = "Opening a window for it…";
-  const r = await run({ op: "make", request });
-  if (r.error) { $("s").className = "msg bad"; $("s").textContent = r.error; $("g").disabled = false; return; }
-  $("t").value = ""; upd(); $("s").textContent = "";
-  making.unshift({ request, t: Date.now() }); load();
+  $("g").disabled = true; $("s").className = "msg"; $("s").textContent = "";
+  const r = await run({ op: "make", request, window: false });
+  if (r.error || !(r.ok && r.ok.draft)) { $("s").className = "msg bad"; $("s").textContent = r.error || "It couldn't start."; $("g").disabled = false; return; }
+  $("t").value = ""; upd();
+  await oa.showDraft(r.ok.draft).catch(e => { $("s").className = "msg bad"; $("s").textContent = String(e); });
+  load();
 };
 // ---- Who builds the apps ---------------------------------------------------
 let S = null, kind = "claude", provId = "anthropic", model = "", replacing = false;

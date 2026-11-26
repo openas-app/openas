@@ -170,15 +170,11 @@ pub(super) enum Choice {
     Discard,
 }
 
-/// Waits for Save as App or Discard from the making window. A window that is
-/// gone (closed, crashed, never opened) counts as Save: finished work is
-/// never lost by closing a window.
+/// Waits for Save as App (with the name the person chose) or Discard. Only
+/// the person's choice saves: a finished draft whose window is gone stays a
+/// draft, waiting on OpenAs's shelf as "Ready to save".
 pub(super) fn wait_for_choice(ws: &Path, name: &str) -> Choice {
-    let (keep, discard, open) = (
-        ws.with_extension("keep"),
-        ws.with_extension("discard"),
-        ws.with_extension("open"),
-    );
+    let (keep, discard) = (ws.with_extension("keep"), ws.with_extension("discard"));
     loop {
         if let Ok(n) = std::fs::read_to_string(&keep) {
             let _ = std::fs::remove_file(&keep);
@@ -193,18 +189,11 @@ pub(super) fn wait_for_choice(ws: &Path, name: &str) -> Choice {
             let _ = std::fs::remove_file(&discard);
             return Choice::Discard;
         }
-        let alive = std::fs::read_to_string(&open)
-            .ok()
-            .and_then(|p| p.trim().parse::<u32>().ok())
-            .is_some_and(|pid| {
-                Command::new("/bin/kill")
-                    .args(["-0", &pid.to_string()])
-                    .stderr(std::process::Stdio::null())
-                    .status()
-                    .is_ok_and(|s| s.success())
-            });
-        if !alive {
-            return Choice::Save(name.to_string());
+        // Gone from disk: nothing to save. Otherwise it waits, however long,
+        // for the person to choose: closing a window or quitting OpenAs is
+        // never a Save. Its tile on OpenAs's shelf opens it again.
+        if !ws.is_dir() {
+            return Choice::Discard;
         }
         std::thread::sleep(std::time::Duration::from_millis(400));
     }
@@ -217,13 +206,28 @@ pub(super) fn wait_for_choice(ws: &Path, name: &str) -> Choice {
 /// the making window can step aside. OPENAS_AUTO_KEEP saves without asking
 /// (scripts and tests).
 pub fn make_run(ws: &Path) -> Result<()> {
-    let request = std::fs::read_to_string(ws.join("prompt.txt"))?;
+    // Carrying on after a stop or a failure: what to do next, said once.
+    // `continue.json`: {"request": for the model, "shown": for the person}.
+    let cont = ws.join("continue.json");
+    let (request, shown) = match std::fs::read_to_string(&cont) {
+        Ok(t) => {
+            let _ = std::fs::remove_file(&cont);
+            let v: Value = serde_json::from_str(&t)?;
+            let r = v["request"].as_str().unwrap_or_default().to_string();
+            let s = v["shown"].as_str().unwrap_or(&r).to_string();
+            (r, s)
+        }
+        Err(_) => {
+            let r = std::fs::read_to_string(ws.join("prompt.txt"))?;
+            (r.clone(), r)
+        }
+    };
     let id = ws
         .file_name()
         .map(|f| f.to_string_lossy().into_owned())
         .unwrap_or_default();
     let say = |s: &str| eprintln!("{s}");
-    let f = run(ws, ws, &request, &id, &make::Events::lines(&say))?;
+    let f = super::turn::run_shown(ws, ws, &request, &shown, &id, &make::Events::lines(&say))?;
     let name = if std::env::var("OPENAS_AUTO_KEEP").is_ok() {
         f.name.clone()
     } else {
@@ -241,16 +245,6 @@ pub fn make_run(ws: &Path) -> Result<()> {
     };
     let info = make::install_draft(ws, &name)?;
     let app = info.installed.clone().unwrap_or_default();
-    let becoming = ws.with_extension("becoming");
-    if becoming.exists() {
-        // Saved from the making window, which closed in on the app's icon:
-        // the app's first window grows out of that spot.
-        let _ = std::fs::copy(&becoming, paths::apps().join(&info.id).join(".grow.json"));
-        let _ = std::fs::remove_file(&becoming);
-    } else {
-        // Otherwise it opens once with its conversation beside it.
-        let _ = std::fs::write(paths::apps().join(&info.id).join(".just-made"), "");
-    }
     std::fs::write(
         ws.with_extension("moved"),
         json!({ "id": info.id, "app": app }).to_string(),
@@ -266,8 +260,6 @@ pub fn make_run(ws: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Starts making an app: the build in its own process and the making window
-/// beside it. Returns the draft folder.
 /// A copy of the Runner named "New app", so the Dock and the app switcher
 /// show that rather than "Runner" while an app is being made. It sits beside
 /// the draft and old ones are cleared on the next make. Falls back to the
@@ -337,7 +329,11 @@ pub(super) fn making_window(ws: &Path) -> PathBuf {
     }
 }
 
-pub fn start_make(request: &str, openas: &Path) -> Result<PathBuf> {
+/// Starts making an app: the build in its own process, and (with `window`)
+/// the making window beside it. Returns the draft folder.
+/// `window`: open the making window too. OpenAs's own window shows the draft
+/// itself and passes false; the command line and other callers pass true.
+pub fn start_make(request: &str, openas: &Path, window: bool) -> Result<PathBuf> {
     let ws = prepare_draft(request)?;
     let log = std::fs::File::create(ws.join("make.log"))?;
     Command::new(openas)
@@ -347,6 +343,9 @@ pub fn start_make(request: &str, openas: &Path) -> Result<PathBuf> {
         .stdout(log.try_clone()?)
         .stderr(log)
         .spawn()?;
+    if !window {
+        return Ok(ws);
+    }
     Command::new(making_window(&ws))
         .arg("--app")
         .arg(&ws)

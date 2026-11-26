@@ -11,8 +11,21 @@ pub fn run(
     job: &str,
     ev: &make::Events,
 ) -> Result<Finished> {
+    run_shown(ws, state_dir, request, request, job, ev)
+}
+
+/// `run`, with `shown` as what the person asked, in the conversation, when
+/// the model is told more than that (carrying on after a stop).
+pub fn run_shown(
+    ws: &Path,
+    state_dir: &Path,
+    request: &str,
+    shown: &str,
+    job: &str,
+    ev: &make::Events,
+) -> Result<Finished> {
     let existing = ws.join("app/index.html").exists();
-    let live = Live::new(state_dir, request, if existing { "change" } else { "new" });
+    let live = Live::new(state_dir, shown, if existing { "change" } else { "new" });
     // Which model really builds it, shown in the column.
     live.set("model", json!(model()));
     let r = run_live(ws, request, job, ev, &live);

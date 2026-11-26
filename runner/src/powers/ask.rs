@@ -22,7 +22,8 @@ pub(crate) fn folder_name(p: &str) -> String {
 }
 
 #[tauri::command]
-pub fn perm_has(name: String, webview: tauri::Webview, me: State<App>) -> Result<Value, String> {
+pub fn perm_has(name: String, webview: tauri::Webview, who: State<Who>) -> Result<Value, String> {
+    let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     if me.check.is_some() || me.making {
         return Ok(json!(false));
@@ -42,7 +43,8 @@ pub async fn perm_request(
     webview: tauri::Webview,
     app: AppHandle,
 ) -> Result<Value, String> {
-    let me = app.state::<App>();
+    let who = app.state::<Who>();
+    let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     let mut out = serde_json::Map::new();
     if me.check.is_some() || me.making {
@@ -324,7 +326,8 @@ pub async fn files_op(
     webview: tauri::Webview,
     app: AppHandle,
 ) -> Result<Value, String> {
-    let me = app.state::<App>();
+    let who = app.state::<Who>();
+    let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     if me.check.is_some() || me.making {
         return Err("no-folder: no folder has been chosen yet".into());

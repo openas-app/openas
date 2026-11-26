@@ -7,8 +7,9 @@
   "remote": {
     "urls": [
       "app://localhost/*",
+      "app://draft/*",
       "http://app.localhost/*"
     ]
   },
-  "permissions": []
+  "permissions": ["core:window:allow-start-dragging"]
 }

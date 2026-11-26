@@ -85,7 +85,7 @@ fn main() -> Result<()> {
             println!("changed: {}\nsummary: {}", folder.display(), f.summary);
         }
         ["make-start", request] => {
-            let ws = openas_core::agent::start_make(request, &std::env::current_exe()?)?;
+            let ws = openas_core::agent::start_make(request, &std::env::current_exe()?, true)?;
             println!("{}", ws.display());
         }
         // Share an app as one file (code and icon, never data), or install one.

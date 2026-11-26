@@ -5,10 +5,45 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:13px/1.45 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;-webkit-user-select:none;user-select:none;cursor:default}
 body{display:flex;flex-direction:column;border-left:1px solid var(--line)}
-.head{height:40px;flex:none;display:flex;align-items:center;padding:0 10px 0 18px;color:var(--faint);font-size:11.5px}
+.head{height:56px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px 0 10px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.head.plain{height:44px;border-bottom:0;margin-bottom:0;padding-left:16px}
+.ttl{display:flex;align-items:center;min-width:0;flex:1}
+.nameBtn{display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;height:30px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--fg);cursor:default;font:inherit}
+.nameBtn b{font-size:15px;line-height:20px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nameBtn .caret{flex:none;color:var(--mute);display:none}
+body.inhome .nameBtn:hover{background:var(--you)}body.inhome .nameBtn .caret{display:block}
+body:not(.inhome) .nameBtn{padding:0;pointer-events:none}
+.menu{position:fixed;z-index:6;min-width:180px;background:var(--card);border:1px solid var(--line);border-radius:11px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:5px}
+.mi{padding:7px 10px;border-radius:7px;font-size:13px;line-height:18px;color:var(--fg)}.mi:hover{background:var(--you)}
+.msep{height:1px;background:var(--line);margin:4px 6px}
+/* OpenAs's window: one bar across, the conversation left, the app in a panel right. */
+.col{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0}
+.right{display:none}
+.hint{flex:none}
+body.inhome{flex-direction:row;border-left:0;--tw:min(380px,50vw)}
+body.inhome .col{flex:none;width:var(--tw)}
+body.inhome .head{height:52px;border-bottom:0;margin-bottom:0;padding:0 8px 0 80px;gap:2px}
+body.inhome .right{display:flex;flex-direction:column;flex:1;min-width:0}
+body.inhome .rhead{height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 8px 0 8px}
+body.inhome .stage{flex:1;margin:0 8px 8px 8px;border-radius:10px;background:var(--you)}
+body.inhome .thread .who{display:none}
+body.inhome .plan{background:transparent;border:0;padding:0}
+body.inhome .hint{padding:0 18px 12px;margin-top:-6px;font-size:12px;line-height:16px;color:var(--faint);min-height:16px}
+body:not(.inhome) .hint:empty{display:none}
+.chip{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px;line-height:16px;color:var(--mute)}
+.chip .sp{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--line);border-top-color:var(--fg);animation:spin 1s linear infinite}
+.chip .ok{width:7px;height:7px;border-radius:50%;background:var(--fg)}
+.chip.bad{color:var(--bad)}.chip.bad .ok{background:var(--bad)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.back{width:32px;height:32px;flex:none;border-radius:7px;border:0;background:transparent;color:var(--mute);display:grid;place-items:center;cursor:default}
+.back:hover{background:var(--you);color:var(--fg)}
+.hacts{display:flex;gap:8px;flex:none}
+.hb1,.hb2{height:32px;padding:0 12px;border-radius:7px;font:600 13px/18px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;cursor:default}
+.hb1{background:var(--accent);color:var(--on-accent);border:1px solid var(--accent)}
+.hb2{background:transparent;color:var(--fg);border:1px solid var(--line)}.hb2:hover{border-color:var(--mute)}
 .head .grow{flex:1}
 .x{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--faint)}.x:hover{background:var(--you);color:var(--fg)}
-.thread{flex:1;overflow-y:auto;padding:4px 18px 12px;display:flex;flex-direction:column;gap:16px}
+.thread{flex:1;overflow-y:auto;padding:4px 16px 12px;display:flex;flex-direction:column;gap:16px;font-size:15px;line-height:22px}
 .thread::-webkit-scrollbar{width:0}
 .spacer{flex:1}
 .you{align-self:flex-end;max-width:88%;background:var(--you);padding:9px 12px;border-radius:14px 14px 4px 14px;-webkit-user-select:text;user-select:text;white-space:pre-wrap}
@@ -49,15 +84,17 @@ body{display:flex;flex-direction:column;border-left:1px solid var(--line)}
 .ver b{color:var(--fg);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ver .now{margin-left:auto;font-size:11px;color:var(--accent);font-weight:600;flex:none}
 .ver .link{margin-left:auto;font-size:11.5px;flex:none}
-.keep{display:flex;align-items:center;gap:12px;padding:12px;border-radius:20px;background:var(--accent-soft);border:1px solid var(--line)}
-.keep img{width:48px;height:48px;flex:none;border-radius:11px;box-shadow:0 1px 3px rgba(0,0,0,.18)}
-.keep .kn{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
-.keep input{font:600 14px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--fg);background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 5px;margin-left:-6px;outline:0;width:100%}
-.keep input:hover{border-color:var(--line)}.keep input:focus{border-color:var(--accent);background:var(--card)}
-.keep span{font-size:12px;color:var(--mute)}
-.keepActs{display:flex;align-items:center;gap:14px;margin-top:10px}
 .btn.save{background:var(--accent);color:var(--on-accent);width:auto;height:auto;padding:7px 14px;border-radius:11px;font:600 13px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
-@media (prefers-color-scheme:dark){.btn.save{color:#10241a}}
+.ask{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:20px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow)}
+.ask b{font-size:15px;line-height:20px;font-weight:600}
+.ask p{margin:0;font-size:13px;line-height:18px;color:var(--mute)}
+.ask label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--mute)}
+.ask input{font:15px/22px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:11px;padding:10px 12px;outline:0}
+.ask input:focus{border-color:var(--accent)}
+.acts{display:flex;gap:12px}
+.b1,.b2{min-height:44px;padding:0 18px;border-radius:11px;font:600 15px/20px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;cursor:default}
+.b1{background:var(--accent);color:var(--on-accent);border:1px solid var(--accent)}
+.b2{background:var(--card);color:var(--fg);border:1px solid var(--accent)}
 .ready{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:20px;background:var(--accent-soft);border:1px solid var(--line)}
 .ready b{display:block;font-size:13px}.ready span{font-size:12px;color:var(--mute)}
 .steer{align-self:flex-end;max-width:88%;border:1px dashed var(--line);color:var(--mute);padding:7px 11px;border-radius:12px;font-size:12.5px;white-space:pre-wrap}
@@ -66,27 +103,32 @@ body{display:flex;flex-direction:column;border-left:1px solid var(--line)}
 .empty{color:var(--faint);font-size:12.5px;text-align:center;padding:30px 10px}
 .box{margin:0 14px 14px;border:1px solid var(--line);border-radius:20px;background:var(--card);padding:10px 10px 8px 12px;box-shadow:var(--shadow);flex:none}
 .box:focus-within{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
-textarea{display:block;width:100%;border:0;outline:0;resize:none;background:transparent;color:var(--fg);font:13px/1.45 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:38px;max-height:160px;padding:0}
+textarea{display:block;width:100%;border:0;outline:0;resize:none;background:transparent;color:var(--fg);font:15px/22px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:38px;max-height:160px;padding:0}
 textarea::placeholder{color:var(--faint)}
 .row{display:flex;align-items:center;gap:8px;margin-top:4px}
-.hint{flex:1;color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
+.hint{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums;padding:0 18px 12px;margin-top:-8px}
+.row .grow,.rhead .grow{flex:1}
 .btn{width:26px;height:26px;border-radius:50%;border:0;padding:0;display:grid;place-items:center;cursor:default;font:700 14px/1 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 .send{background:var(--accent);color:var(--on-accent)}.send:disabled{background:var(--line)}
-@media (prefers-color-scheme:dark){.send{color:#10241a}}
 .stop{background:var(--fg)}.stop::after{content:"";width:8px;height:8px;border-radius:2px;background:var(--card)}
 .code{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;z-index:5}
 .code.on{display:flex}
 .code .tabs{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);overflow-x:auto;flex:none;align-items:center}
 .code .tab{padding:3px 9px;border-radius:6px;color:var(--mute);font-size:12px;white-space:nowrap}
 .code .tab.on{background:var(--you);color:var(--fg)}
-.code pre{flex:1;margin:0;overflow:auto;padding:12px 14px;font:11.5px/1.5 ui-monospace,Menlo,monospace;-webkit-user-select:text;user-select:text;white-space:pre}
+.code pre{flex:1;margin:0;overflow:auto;padding:12px 14px;font:500 12px/18px "JetBrains Mono",ui-monospace,Menlo,monospace;-webkit-user-select:text;user-select:text;white-space:pre}
 </style></head><body>
-<div class="head"><span class="grow" id="headline"></span><span class="x" id="close" title="Hide">✕</span></div>
+<div class="col">
+<div class="head plain" id="head" data-tauri-drag-region><button class="back" id="homeLink" title="Back to your apps" aria-label="Back to your apps" hidden><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg></button><div class="ttl" data-tauri-drag-region><button class="nameBtn" id="nameBtn"><b id="headline"></b><svg class="caret" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4 5 6.5 7.5 4"/></svg></button></div><span class="x" id="close" title="Hide">✕</span></div>
+<div class="menu" id="menu" hidden><div class="mi" data-act="code">Show code</div><div class="msep"></div><div class="mi" data-act="ask-discard">Discard…</div></div>
 <div class="thread" id="thread"></div>
 <div class="box">
   <textarea id="t" rows="1" placeholder="Ask for a change…"></textarea>
-  <div class="row"><span class="hint" id="hint"></span><button class="btn send" id="send" disabled>↑</button></div>
+  <div class="row"><span class="grow"></span><button class="btn send" id="send" disabled>↑</button></div>
 </div>
+<div class="hint" id="hint"></div>
+</div>
+<div class="right" id="right"><div class="rhead" data-tauri-drag-region><span class="chip" id="chip" hidden></span><span class="grow" data-tauri-drag-region></span><div class="hacts" id="hacts"></div></div><div class="stage"></div></div>
 <div class="code" id="code"><div class="tabs" id="tabs"><span class="x" id="codeX" title="Close" style="margin-left:auto">✕</span></div><pre id="src"></pre></div>
 <script>
 const $ = id => document.getElementById(id);
@@ -135,27 +177,43 @@ function track(m, words) {
 const dur = ms => ms < 60000 ? Math.round(ms / 1000) + "s" : Math.floor(ms / 60000) + "m " + Math.round(ms % 60000 / 1000) + "s";
 const foldHtml = () => `<details class="fold"${thought.open ? " open" : ""}><summary>Thought for ${dur(thought.ms)}</summary><div class="all">${esc([thought.text, thought.last].filter(Boolean).join("\n\n"))}</div></details>`;
 document.addEventListener("toggle", e => { if (e.target.classList && e.target.classList.contains("fold")) thought.open = e.target.open; }, true);
+// A draft whose build ended early: carry on, or throw it away.
+const carryOnHtml = m => {
+  if (S.mode !== "making") return "";
+  if (discarding) return `<div class="ready"><div><b>Discarding…</b></div></div>`;
+  if (asking === "discard") return `<div class="ask"><b>Discard ${esc(m.name || "this app")}?</b><p>The app and this conversation are deleted. Nothing is added to your Applications.</p><div class="acts"><button class="b1" data-act="do-discard">Discard</button><button class="b2" data-act="cancel">Cancel</button></div></div>`;
+  return `<div class="acts"><button class="b1" data-act="carry-on">${m.phase === "failed" ? "Try again" : "Continue"}</button><button class="b2" data-act="ask-discard">Discard</button></div>`;
+};
 function makingHtml(m) {
-  let h = `<div class="you">${esc(m.request)}<span class="when">${when(m.started)}</span></div><div class="oa">`;
+  let h = "";
+  // Carried on after a stop: the first request stays where it was asked.
+  if (S.first && m.request !== S.first) h += `<div class="you">${esc(S.first)}</div><p class="meta">It stopped before it was finished.</p>`;
+  h += `<div class="you">${esc(m.request)}<span class="when">${when(m.started)}</span></div><div class="oa">`;
   const planning = !m.plan;
   h += who(m.phase === "done" ? "" : planning ? "planning" : m.kind === "change" ? "changing" : "making");
-  if (m.plan) h += `<div class="plan"><div>${esc(m.plan.summary)}</div>${partsHtml(m)}</div>`;
+  // Once it's done, the closing summary says what it is: the plan's own
+  // summary would say it twice.
+  if (m.plan) h += `<div class="plan">${m.phase === "done" ? "" : `<div>${esc(m.plan.summary)}</div>`}${partsHtml(m)}</div>`;
   for (const n of m.notes || []) h += `<div class="steer">${esc(n.text)}<small>Noted. Used from the next step.</small></div>`;
   for (const n of pending.filter(p => !(m.notes || []).some(x => x.text === p))) h += `<div class="steer">${esc(n)}<small>Sent. Read after the current step.</small></div>`;
   if (m.phase === "done") {
     if (thought.key === m.started && thought.ms >= 1000) h += foldHtml();
     if (m.unfinished) h += `<p class="summary">${esc(m.unfinished)} What it made so far is on the left. If it works, save it; you can finish it later by asking for changes.</p>`;
     else h += `<p class="summary">${prose(m.summary)}</p>`;
-    if (S.mode === "making" && S.moved) h += `<div class="ready"><div><b>${S.moved.discarded ? "Discarded" : esc(chosenName || m.name) + " is saved"}</b><span>${S.moved.discarded ? "Nothing was added to your Applications." : "Opening it from your Applications…"}</span></div></div>`;
-    else if (S.mode === "making" && chosenName != null) h += `<div class="ready"><div><b>Saving ${esc(chosenName || m.name)}…</b><span>Adding it to your Applications</span></div></div>`;
-    else if (S.mode === "making") h += `<div class="keep">${S.icon ? `<img src="${S.icon}" alt="">` : ""}<div class="kn"><input id="keepName" value="${esc(m.name)}" spellcheck="false" aria-label="App name"><span>Try it on the left. Saved, it becomes an app with its own window and icon. It can't reach your files or run programs unless you allow it.</span></div></div>
-      <div class="keepActs"><button class="btn save" data-act="save">Save as App</button><span class="link" role="button" tabindex="0" data-act="discard">Discard</span></div>`;
+    const nm = esc(chosenName || m.name || "The app");
+    if (S.mode === "making" && S.moved) h += `<div class="ready"><div><b>${S.moved.discarded ? "Discarded" : nm + " is in your Applications"}</b><span>${S.moved.discarded ? "Nothing was added to your Applications." : "It's opening now, in its own window."}</span></div></div>`;
+    else if (S.mode === "making" && chosenName != null) h += `<div class="ready"><div><b>Saving ${nm}…</b><span>Adding it to your Applications</span></div></div>`;
+    else if (S.mode === "making" && discarding) h += `<div class="ready"><div><b>Discarding…</b></div></div>`;
+    else if (S.mode === "making" && asking === "save") h += `<div class="ask"><b>Save as App</b><label>Name<input id="saveName" value="${esc(m.name || "")}" maxlength="60" spellcheck="false"></label><p>It goes in your Applications folder with its own icon and window. It can't reach your files or run programs unless you allow it.</p><div class="acts"><button class="b1" data-act="do-save">Save as App</button><button class="b2" data-act="cancel">Cancel</button></div></div>`;
+    else if (S.mode === "making" && asking === "discard") h += `<div class="ask"><b>Discard ${esc(m.name || "this app")}?</b><p>The app and this conversation are deleted. Nothing is added to your Applications.</p><div class="acts"><button class="b1" data-act="do-discard">Discard</button><button class="b2" data-act="cancel">Cancel</button></div></div>`;
     h += `<div class="meta">${m.model ? esc(modelName(m.model)) + " · " : ""}${m.minutes} min · ${m.step} steps${m.usd != null ? " · $" + Number(m.usd).toFixed(2) : ""}<span class="grow"></span><span class="link" role="button" tabindex="0" data-act="code">Show code</span></div>`;
   } else if (m.phase === "failed") {
     const limit = String(m.error || "").startsWith("[limit] ");
     h += `<p class="bad">${limit ? "<b>Spending limit reached.</b> " : ""}${esc(String(m.error || "It stopped.").replace(/^\[limit\] /, ""))}</p><p class="meta">${m.kind === "change" ? "Nothing changed in your app." : "Nothing was installed."}</p>`;
+    h += carryOnHtml(m);
   } else if (m.phase === "stopped") {
     h += `<p class="meta">Stopped. ${m.kind === "change" ? "Nothing changed in your app." : "Nothing was installed."}</p>`;
+    h += carryOnHtml(m);
   } else {
     const what = planning ? "Thinking about how it should work" : m.phase === "checking" ? (m.doing || "Trying it out") : (m.doing || (m.tool === "view" || m.tool === "list" ? "Reading the app" : "Writing the app"));
     // What it's doing now, then its live words under it: the part that moves
@@ -200,9 +258,6 @@ function render() {
   if (S.mode === "making") h = m ? makingHtml(m) : "";
   else {
     h = storyHtml();
-    // Edits are a try-out until they're saved.
-    if (S.pending && !(m && active(m))) h += `<div class="keep"><div class="kn"><b>Edited, not saved yet</b><span>Try it on the left. Save as App to keep it, or Discard to go back to the saved app.</span></div></div>
-      <div class="keepActs"><button class="btn save" data-act="save-change">Save as App</button><span class="link" role="button" tabindex="0" data-act="discard-change">Discard</span></div>`;
     const recentEnd = m && ["failed", "stopped"].includes(m.phase) && Date.now() / 1000 - (m.now || 0) < 30;
     if (m && (active(m) || recentEnd)) h += makingHtml(m);
   }
@@ -210,26 +265,52 @@ function render() {
     // Follows the newest only while you're at the bottom; once you scroll up
     // it stays exactly where you put it.
     const th = $("thread"), top = th.scrollTop;
-    const kn = $("keepName"), typed = kn ? kn.value : null, focused = kn && document.activeElement === kn;
+    const sn = $("saveName"), typed = sn ? sn.value : null, focused = sn && document.activeElement === sn;
     th.innerHTML = h; lastSig = h;
-    if (typed != null && $("keepName")) { $("keepName").value = typed; if (focused) $("keepName").focus(); }
+    if (typed != null && $("saveName")) { $("saveName").value = typed; if (focused) $("saveName").focus(); }
     // Rebuilt spinners carry on from the same clock instead of restarting.
     const phase = -(performance.now() % 1000) + "ms";
     th.querySelectorAll(".parts li.now .st, .status .spin").forEach(e => e.style.animationDelay = phase);
     th.scrollTop = follow ? th.scrollHeight : top;
   }
-  $("headline").textContent = S.mode === "making" ? (m && m.name ? m.name : "New app") + (m && m.phase === "done" ? "" : " · being made") : S.name;
-  $("close").style.visibility = S.mode === "making" ? "hidden" : "visible";
+  $("headline").textContent = S.mode === "making" ? (m && m.name ? m.name : "New app") : S.name;
+  // OpenAs's window: a bar with the way back, where the build is, and the
+  // two choices once it's done.
+  $("head").className = S.home ? "head" : "head plain";
+  document.body.classList.toggle("inhome", !!S.home);
+  const chip = $("chip");
+  chip.hidden = !(S.home && m);
+  if (S.home && m) {
+    const working = WORKING.includes(m.phase), stuck = m.phase === "failed" || m.phase === "stopped";
+    const saving = chosenName != null && !S.moved;
+    chip.className = "chip" + (stuck ? " bad" : "");
+    const label = S.moved ? (S.moved.discarded ? "Discarded" : "Saved to Applications")
+      : saving ? "Saving…" : discarding ? "Discarding…"
+      : working ? (m.plan ? "Building · step " + (m.step || 1) : "Planning")
+      : m.phase === "done" ? "Ready to save" : m.phase === "stopped" ? "Stopped" : "Didn't finish";
+    const icon = working || saving || discarding ? '<i class="sp"></i>' : '<i class="ok"></i>';
+    if (chip.dataset.l !== label) { chip.dataset.l = label; chip.innerHTML = icon + esc(label); }
+  }
+  const showActs = S.home && m && m.phase === "done" && !S.moved && chosenName == null && !discarding && !asking;
+  const ha = $("hacts"), want = showActs ? "1" : "";
+  if (ha.dataset.on !== want) {
+    ha.dataset.on = want;
+    ha.innerHTML = showActs ? '<button class="hb2" data-act="ask-discard">Discard</button><button class="hb1" data-act="ask-save">Save as App</button>' : "";
+  }
+  $("close").style.display = S.mode === "making" ? "none" : "";
+  $("homeLink").hidden = !S.home;
   const busy = !!m && WORKING.includes(m.phase) && (S.mode === "making" || active(m));
   const t = $("t"), send = $("send"), empty = !t.value.trim();
   t.placeholder = busy ? "Add a note while it works…" : "Ask for a change…";
-  t.disabled = S.mode === "making" && !busy;
+  const ended = !!m && S.mode === "making" && (m.phase === "stopped" || m.phase === "failed") && !discarding;
+  t.disabled = S.mode === "making" && !busy && !ended;
+  if (ended) t.placeholder = "Continue, or say what to do next…";
   send.className = "btn " + (busy && empty ? "stop" : "send");
   send.textContent = busy && empty ? "" : "↑";
-  send.disabled = !busy && (empty || S.mode === "making");
+  send.disabled = !busy && (ended ? false : (empty || S.mode === "making"));
   send.title = busy && empty ? "Stop" : "Send";
   const el = m && m.started ? Math.max(0, (m.now || 0) - m.started) : 0;
-  $("hint").textContent = busy ? (m.plan ? "Step " + (m.step || 1) + " · " : "Planning · ") + mins(el) : S.mode === "making" ? "" : "Your app keeps working while it changes";
+  $("hint").textContent = busy ? (m.plan ? "Step " + (m.step || 1) + " · " : "Planning · ") + mins(el) : S.mode === "making" ? (m && m.phase === "done" && !S.moved && chosenName == null && !S.home ? "Save as App is in the menu bar" : "") : S.pending ? "Edited, not saved yet · Save as App is in the menu bar" : "Your app keeps working while it changes";
 }
 
 async function tick() {
@@ -257,6 +338,7 @@ $("send").onclick = async () => {
   t.value = ""; t.style.height = "auto";
   follow = true; // what you just sent, and the answer, come into view
   if (busy) { pending.push(text); await oa.note(text); render(); return; }
+  if (S.mode === "making" && m && (m.phase === "stopped" || m.phase === "failed")) { await carryOn(text); return; }
   if (S.mode === "making") return;
   pending = [];
   job = { id: null }; render();
@@ -272,21 +354,50 @@ $("send").onclick = async () => {
   watch();
 };
 $("close").onclick = () => oa.hide();
+// Save as App and Discard live in the menu bar; the menu calls this. Each
+// asks first, here: the name to save it under, or whether to throw it away.
+let asking = null, discarding = false;
+window.__oaChoose = act => {
+  if (chosenName != null || discarding || (S && S.moved)) return;
+  asking = act === "save" ? "save" : "discard";
+  lastSig = ""; follow = true; render();
+  const sn = $("saveName"); if (sn) { sn.focus(); sn.select(); }
+};
+const carryOn = async text => {
+  if (!text && !S) return;
+  $("t").value = ""; $("t").style.height = "auto"; follow = true;
+  try { await oa.carryOn(text); } catch (e) { $("hint").textContent = String(e); }
+};
+const doSave = async () => {
+  const m = S && S.making;
+  const name = (($("saveName") && $("saveName").value) || "").trim() || (m && m.name) || "";
+  asking = null; chosenName = name; lastSig = ""; render();
+  try { await oa.choose(true, name); } catch (e) { chosenName = null; lastSig = ""; render(); }
+};
+$("homeLink").onclick = () => oa.home();
+$("nameBtn").onclick = e => {
+  if (!S || !S.home) return;
+  e.stopPropagation();
+  const mn = $("menu"), r = $("nameBtn").getBoundingClientRect();
+  mn.style.left = r.left + "px"; mn.style.top = (r.bottom + 4) + "px";
+  const m = S.making, live = m && (m.phase === "done" || m.phase === "stopped" || m.phase === "failed") && !S.moved && chosenName == null && !discarding;
+  mn.querySelector('[data-act="ask-discard"]').hidden = !live;
+  mn.querySelector(".msep").hidden = !live;
+  mn.hidden = !mn.hidden;
+};
+document.addEventListener("click", () => { $("menu").hidden = true; }, true);
+document.addEventListener("keydown", e => {
+  if (e.target.id === "saveName" && e.key === "Enter") { e.preventDefault(); doSave(); }
+  if (asking && e.key === "Escape") { asking = null; lastSig = ""; render(); }
+});
 document.addEventListener("click", async e => {
   const a = e.target.closest("[data-act]"); if (!a) return;
-  if (a.dataset.act === "save" || a.dataset.act === "discard") {
-    const save = a.dataset.act === "save";
-    chosenName = save ? ($("keepName") ? $("keepName").value.trim() : "") : null;
-    if (!save) a.textContent = "Discarding…";
-    await oa.choose(save, chosenName || "");
-    return;
-  }
-  if (a.dataset.act === "save-change" || a.dataset.act === "discard-change") {
-    const save = a.dataset.act === "save-change";
-    a.textContent = save ? "Saving…" : "Discarding…";
-    await run({ op: save ? "save_change" : "discard_change" }); await loadVersions();
-    return;
-  }
+  if (a.dataset.act === "carry-on") return carryOn("");
+  if (a.dataset.act === "ask-save") return window.__oaChoose("save");
+  if (a.dataset.act === "ask-discard") return window.__oaChoose("discard");
+  if (a.dataset.act === "do-save") return doSave();
+  if (a.dataset.act === "cancel") { asking = null; lastSig = ""; render(); return; }
+  if (a.dataset.act === "do-discard") { asking = null; discarding = true; lastSig = ""; render(); try { await oa.choose(false, ""); } catch (e) { discarding = false; render(); } return; }
   if (a.dataset.act === "restore") {
     a.textContent = "Going back…";
     await run({ op: "restore", version: Number(a.dataset.v) }); await loadVersions();
@@ -303,7 +414,6 @@ document.addEventListener("click", async e => {
   }
 });
 // Return in the name field saves.
-document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "keepName") { e.preventDefault(); document.querySelector('[data-act="save"]')?.click(); } });
 $("codeX").onclick = () => $("code").classList.remove("on");
 tick().then(() => setTimeout(loadVersions, 300));
 </script></body></html>

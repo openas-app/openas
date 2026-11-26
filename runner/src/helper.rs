@@ -22,9 +22,10 @@ pub(crate) struct Inbox(pub(crate) Mutex<Vec<String>>);
 #[tauri::command]
 pub fn shared_pending(
     webview: tauri::Webview,
-    me: State<App>,
+    who: State<Who>,
     inbox: State<Inbox>,
 ) -> Result<Vec<String>, String> {
+    let me = who.me(&webview)?;
     if webview.label() != "main" || !me.manager {
         return Err("not allowed".into());
     }
@@ -179,7 +180,10 @@ pub(crate) fn start_job(app: &AppHandle, req: Value) -> u64 {
         .insert(id, job.clone());
     let handle = app.clone();
     std::thread::spawn(move || {
-        let me = handle.state::<App>();
+        // The connection is this process's own: the Helper knows OpenAs and
+        // each app by the process that calls. What a webview may ask was
+        // settled by `vet` before the job started.
+        let me = handle.state::<Who>().home.clone();
         let done = match helper_request(&me, &req, &job) {
             Ok(v) => v,
             Err(e) => json!({ "error": e }),
@@ -196,8 +200,9 @@ pub fn helper_start(
     req: Value,
     webview: tauri::Webview,
     app: AppHandle,
-    me: State<App>,
+    who: State<Who>,
 ) -> Result<u64, String> {
+    let me = who.me(&webview)?;
     let req = vet(&webview, &me, req)?;
     Ok(start_job(&app, req))
 }
@@ -208,9 +213,10 @@ pub fn helper_poll(
     seen: Option<u64>,
     webview: tauri::Webview,
     jobs: State<Jobs>,
-    me: State<App>,
+    who: State<Who>,
 ) -> Result<Value, String> {
     let seen = seen.unwrap_or(0);
+    let me = who.me(&webview)?;
     may_follow(&webview, &me)?;
     let j = jobs
         .all
@@ -233,8 +239,9 @@ pub fn helper_stop(
     job: u64,
     webview: tauri::Webview,
     jobs: State<Jobs>,
-    me: State<App>,
+    who: State<Who>,
 ) -> Result<(), String> {
+    let me = who.me(&webview)?;
     may_follow(&webview, &me)?;
     if let Some(j) = jobs
         .all

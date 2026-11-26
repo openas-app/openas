@@ -5,9 +5,10 @@ pub fn menubar_set(
     spec: Value,
     webview: tauri::Webview,
     app: AppHandle,
-    me: State<App>,
+    who: State<Who>,
     tray: State<Tray>,
 ) -> Result<bool, String> {
+    let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     if me.check.is_some() || me.making {
         return Ok(true);
@@ -115,9 +116,10 @@ pub fn menubar_set(
 pub fn menubar_clear(
     webview: tauri::Webview,
     app: AppHandle,
-    me: State<App>,
+    who: State<Who>,
     tray: State<Tray>,
 ) -> Result<bool, String> {
+    let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     if let Some(t) = tray
         .0
@@ -136,8 +138,9 @@ pub fn window_op(
     on: Option<bool>,
     webview: tauri::Webview,
     app: AppHandle,
-    me: State<App>,
+    who: State<Who>,
 ) -> Result<bool, String> {
+    let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     if me.check.is_some() || me.making {
         return Ok(true);
@@ -169,7 +172,8 @@ pub async fn system_run(
     webview: tauri::Webview,
     app: AppHandle,
 ) -> Result<Value, String> {
-    let me = app.state::<App>();
+    let who = app.state::<Who>();
+    let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     if me.check.is_some() || me.making {
         return Err("not-allowed: programs don't run while the app is being made".into());
@@ -311,9 +315,10 @@ pub fn shortcuts_set(
     list: Vec<String>,
     webview: tauri::Webview,
     app: AppHandle,
-    me: State<App>,
+    who: State<Who>,
 ) -> Result<Value, String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     if me.check.is_some() || me.making {
         return Ok(json!({ "active": list, "failed": [] }));
@@ -346,9 +351,10 @@ pub fn shortcuts_set(
 pub fn shortcuts_clear(
     webview: tauri::Webview,
     app: AppHandle,
-    me: State<App>,
+    who: State<Who>,
 ) -> Result<bool, String> {
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     let _ = app.global_shortcut().unregister_all();
     Ok(true)

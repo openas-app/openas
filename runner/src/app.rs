@@ -1,5 +1,6 @@
 use crate::*;
 
+#[derive(Clone)]
 pub(crate) struct App {
     pub(crate) folder: PathBuf,
     pub(crate) name: String,

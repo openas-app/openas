@@ -3,18 +3,21 @@ use crate::*;
 // ---- The page's API -------------------------------------------------------
 
 #[tauri::command]
-pub fn store_get(key: String, store: State<Store>) -> Value {
-    store
+pub fn store_get(key: String, webview: tauri::Webview, who: State<Who>) -> Result<Value, String> {
+    let store = who.store(&webview)?;
+    let v = store
         .map
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(&key)
         .cloned()
-        .unwrap_or(Value::Null)
+        .unwrap_or(Value::Null);
+    Ok(v)
 }
 
 #[tauri::command]
-pub fn store_set(key: String, value: Value, store: State<Store>) -> Result<bool, String> {
+pub fn store_set(key: String, value: Value, webview: tauri::Webview, who: State<Who>) -> Result<bool, String> {
+    let store = who.store(&webview)?;
     let mut map = store
         .map
         .lock()
@@ -32,7 +35,8 @@ pub fn store_set(key: String, value: Value, store: State<Store>) -> Result<bool,
 }
 
 #[tauri::command]
-pub fn notify(text: String, app: AppHandle, me: State<App>) -> Result<bool, String> {
+pub fn notify(text: String, webview: tauri::Webview, app: AppHandle, who: State<Who>) -> Result<bool, String> {
+    let me = who.me(&webview)?;
     if me.check.is_some() || me.making {
         return Ok(true);
     }
@@ -50,7 +54,10 @@ pub fn notify(text: String, app: AppHandle, me: State<App>) -> Result<bool, Stri
 
 /// Only the load check may call this; for an ordinary app window it does nothing.
 #[tauri::command]
-pub fn check_report(mut report: Value, app: AppHandle, me: State<App>, store: State<Store>) {
+pub fn check_report(mut report: Value, webview: tauri::Webview, app: AppHandle, who: State<Who>) {
+    let (Ok(me), Ok(store)) = (who.me(&webview), who.store(&webview)) else {
+        return;
+    };
     if let Some(path) = &me.check {
         // What the app saved as it opened (kept in memory; nothing is written).
         report["store_keys"] = json!(store

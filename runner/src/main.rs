@@ -45,26 +45,27 @@ pub(crate) const VERSIONS_PAGE: &str = include_str!("../pages/versions.html");
 pub(crate) const TALK_PAGE: &str = include_str!("../pages/talk.html");
 /// Shown where the app will be, until its first file exists.
 pub(crate) const WAITING_PAGE: &str = r#"<!doctype html><meta charset="utf-8"><style>
-:root{color-scheme:light dark;--bg:#e9e7e2;--fg:#9d9b95;--line:#d6d3cb}@media (prefers-color-scheme:dark){:root{--bg:#141414;--fg:#74736e;--line:#353533}}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:13px -apple-system,system-ui,sans-serif;display:grid;place-items:center}
-.g{width:220px;height:150px;border-radius:14px;border:1.5px dashed var(--line);display:grid;place-items:center;margin:0 auto 12px}
-.g i{width:40px;height:40px;border-radius:11px;background:var(--line);opacity:.6;animation:p 2.4s ease-in-out infinite}@keyframes p{50%{opacity:.25}}
+:root{color-scheme:light dark;--bg:#F4F4F5;--fg:#52525B;--line:#D4D4D8}@media (prefers-color-scheme:dark){:root{--bg:#0B0B0C;--fg:#A1A1AA;--line:#2E2E33}}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:13px/18px "Inter",-apple-system,system-ui,sans-serif;display:grid;place-items:center}
+.g{width:220px;height:150px;border-radius:20px;border:1.5px dashed var(--line);display:grid;place-items:center;margin:0 auto 12px}
+.g i{width:40px;height:40px;border-radius:11px;background:var(--line);opacity:.8;animation:p 2.4s ease-in-out infinite}@keyframes p{50%{opacity:.25}}
 </style><div><div class="g"><i></i></div>Your app opens here as soon as it runs.</div>"#;
 /// The conversation column's width (logical points).
 pub(crate) const TALK_W: f64 = 380.0;
 
 mod api;
 mod app;
-mod becoming;
 mod helper;
 mod serve;
 mod talk;
+mod who;
 
 use api::*;
 use app::*;
 use helper::*;
 use serve::*;
 use talk::*;
+pub(crate) use who::{Draft, Who};
 
 fn main() {
     let me = which_app();
@@ -93,17 +94,20 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .register_uri_scheme_protocol("app", move |_ctx, req| {
+        .register_uri_scheme_protocol("app", move |ctx, req| {
             let rel = req.uri().path().trim_start_matches('/');
+            // OpenAs's window: the draft's page gets the draft's files and
+            // nothing else; with no draft shown, nothing at all.
+            if ctx.webview_label() == "app" {
+                if let Some(who) = ctx.app_handle().try_state::<Who>().filter(|w| w.home.manager) {
+                    return match who.shown() {
+                        Some(Draft { app: d, .. }) => serve_dir(&d.folder.join("app"), rel, &policy(network_allowed(&d.folder))),
+                        None => not_found(),
+                    };
+                }
+            }
             let csp = policy(net_proto.load(Ordering::SeqCst));
-            let ok = |bytes: Vec<u8>, mime: &str, csp: &str| {
-                http::Response::builder()
-                    .header("Content-Type", mime)
-                    .header("Cache-Control", "no-store")
-                    .header("Content-Security-Policy", csp)
-                    .body(Cow::Owned(bytes))
-                    .unwrap()
-            };
+            let ok = respond;
             // OpenAs' own pages: never any internet (the build preview
             // inside the manager inherits this).
             match rel {
@@ -113,26 +117,16 @@ fn main() {
                 "__oa/talk.html" => return ok(TALK_PAGE.as_bytes().to_vec(), "text/html", &policy(false)),
                 _ => {}
             }
-            // Only files inside <folder>/app (or its edits waiting to be
-            // saved); no climbing out with "..".
+            // The app's files (or its edits waiting to be saved).
             let root_dir = if pending_root.join("index.html").exists() { &pending_root } else { &root_dir };
-            let rel = if rel.is_empty() { "index.html" } else { rel };
-            let path = root_dir.join(rel);
-            if rel == "index.html" && !path.exists() {
-                return ok(WAITING_PAGE.as_bytes().to_vec(), "text/html", &policy(false));
-            }
-            let inside = path.canonicalize().ok().zip(root_dir.canonicalize().ok()).is_some_and(|(p, r)| p.starts_with(r));
-            match std::fs::read(&path) {
-                Ok(bytes) if inside => ok(bytes, mime(&path), &csp),
-                _ => http::Response::builder().status(404).body(Cow::Borrowed(&b""[..])).unwrap(),
-            }
+            serve_dir(root_dir, rel, &csp)
         })
-        .manage(store)
-        .manage(me)
+        .manage(me.clone())
+        .manage(Who::new(me, store))
         .manage(Jobs::default())
         .manage(Inbox::default())
         .manage(powers::Tray(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![store_get, store_set, notify, check_report, helper_start, helper_poll, helper_stop, close_sheet, talk_state, talk_note, talk_stop, talk_choose, shared_pending, talk_code, talk_close, powers::ask::perm_has, powers::perm_request, powers::files_op, powers::extras::menubar_set, powers::extras::menubar_clear, powers::extras::shortcuts_set, powers::extras::shortcuts_clear, powers::system_run, powers::extras::window_op])
+        .invoke_handler(tauri::generate_handler![store_get, store_set, notify, check_report, helper_start, helper_poll, helper_stop, close_sheet, who::drafts_list, who::draft_show, who::draft_home, talk_state, talk_note, talk_stop, talk_continue, talk_choose, shared_pending, talk_code, talk_close, powers::ask::perm_has, powers::perm_request, powers::files_op, powers::extras::menubar_set, powers::extras::menubar_clear, powers::extras::shortcuts_set, powers::extras::shortcuts_clear, powers::system_run, powers::extras::window_op])
         .on_menu_event(|app, event| match event.id().as_ref() {
             "change" | "versions" => show_talk(app, true),
             "share" => {
@@ -171,7 +165,8 @@ fn main() {
             id if id.starts_with("mb:") => powers::emit(app, "menu-bar", json!(&id[3..])),
             // The draft's menu presses the same buttons as the card in the column,
             // so the name typed there is the one it's saved with.
-            "save-app" | "discard-app" if !app.state::<App>().making => {
+            // A finished app's own edits (OpenAs's window only shows drafts).
+            "save-app" | "discard-app" if !app.state::<App>().making && !app.state::<App>().manager => {
                 let me = app.state::<App>();
                 let op = if event.id().as_ref() == "save-app" { "save_change" } else { "discard_change" };
                 let req = json!({ "op": op, "app": me.app_id() });
@@ -181,7 +176,7 @@ fn main() {
                 show_talk(app, true);
                 let act = if event.id().as_ref() == "save-app" { "save" } else { "discard" };
                 if let Some(t) = app.get_webview("talk") {
-                    let _ = t.eval(format!("document.querySelector('[data-act=\"{act}\"]')?.click()"));
+                    let _ = t.eval(format!("window.__oaChoose && window.__oaChoose('{act}')"));
                 }
             }
             "undo-change" => {
@@ -282,21 +277,38 @@ fn main() {
             }
             // An app's window holds two webviews: the app, and the conversation
             // column beside it (hidden until asked for, open while it's made).
-            // Just made: the finished app opens with its conversation still
-            // beside it, so the story doesn't vanish at the hand-off.
-            let just_made = folder.join(".just-made");
-            let open_talk = making || (split && just_made.exists());
-            let _ = std::fs::remove_file(&just_made);
-            // Just saved from the making window: grow out of its icon.
-            let grow = if split && !making { becoming::take_grow(&folder) } else { None };
+            let open_talk = making;
             let main: tauri::Window = if split {
                 let quiet_win = std::env::var("OPENAS_QUIET_WINDOW").is_ok();
-                let win = tauri::window::WindowBuilder::new(app, "main").title(&title).inner_size(start_w + if open_talk { TALK_W } else { 0.0 }, start_h).focused(!quiet_win).visible(grow.is_none()).decorations(grow.is_none()).build()?;
+                let win = tauri::window::WindowBuilder::new(app, "main").title(&title).inner_size(start_w + if open_talk { TALK_W } else { 0.0 }, start_h).focused(!quiet_win).build()?;
                 let ab = wire!(tauri::webview::WebviewBuilder::new("app", url("/index.html"))).initialization_script(bridge());
                 win.add_child(ab, tauri::LogicalPosition::new(0.0, 0.0), tauri::LogicalSize::new(start_w, start_h))?;
                 let tb = tauri::webview::WebviewBuilder::new("talk", url("/__oa/talk.html")).initialization_script(oa_bridge(&title));
                 win.add_child(tb, tauri::LogicalPosition::new(start_w, 0.0), tauri::LogicalSize::new(TALK_W, start_h))?;
                 app.manage(Talk { open: std::sync::atomic::AtomicBool::new(open_talk) });
+                win
+            } else if manager && checking.is_none() {
+                // OpenAs's window: Home, and in its place an app being made
+                // (its page and its conversation), added by `who::show`.
+                // One bar across the whole window, drawn by the pages, with the
+                // traffic lights inside it (as Claude's own window does).
+                let cfg = tauri::utils::config::WindowConfig {
+                    label: "main".into(),
+                    title: title.clone(),
+                    width: start_w,
+                    height: start_h,
+                    #[cfg(target_os = "macos")]
+                    title_bar_style: tauri::TitleBarStyle::Overlay,
+                    #[cfg(target_os = "macos")]
+                    hidden_title: true,
+                    #[cfg(target_os = "macos")]
+                    traffic_light_position: Some(tauri::utils::config::LogicalPosition { x: 18.0, y: who::BAR_H / 2.0 + 1.0 }),
+                    create: false,
+                    ..Default::default()
+                };
+                let win = tauri::window::WindowBuilder::from_config(app, &cfg)?.build()?;
+                let hb = wire!(tauri::webview::WebviewBuilder::new("main", url(page))).initialization_script(oa_bridge("OpenAs"));
+                win.add_child(hb, tauri::LogicalPosition::new(0.0, 0.0), tauri::LogicalSize::new(start_w, start_h))?;
                 win
             } else {
                 let w = b.build()?;
@@ -306,13 +318,7 @@ fn main() {
                 }
                 win
             };
-            match grow {
-                Some((from, to)) => {
-                    let w = main.clone();
-                    std::thread::spawn(move || becoming::grow_out(w, from, to));
-                }
-                None => restore_frame(&main, &folder),
-            }
+            restore_frame(&main, &folder);
             layout(app.handle());
             let frame_file = folder.join(".window.json");
             let w2 = main.clone();
@@ -348,7 +354,7 @@ fn main() {
             // While an app is being made, its menu is about the draft: save it
             // as an app once it's done, or discard it.
             let save_app = MenuItem::with_id(h, "save-app", "Save as App", false, None::<&str>)?;
-            let discard_app = MenuItem::with_id(h, "discard-app", if making { "Discard" } else { "Discard Changes" }, false, None::<&str>)?;
+            let discard_app = MenuItem::with_id(h, "discard-app", if making || manager { "Discard" } else { "Discard Changes" }, false, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(h)?;
             let (hide, hide_others, show_all, quit) = (
                 PredefinedMenuItem::hide(h, None)?,
@@ -357,7 +363,7 @@ fn main() {
                 PredefinedMenuItem::quit(h, None)?,
             );
             let (sep2, sep3, sep4, sep5) = (PredefinedMenuItem::separator(h)?, PredefinedMenuItem::separator(h)?, PredefinedMenuItem::separator(h)?, PredefinedMenuItem::separator(h)?);
-            let items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = if making {
+            let items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = if making || manager {
                 vec![&save_app, &discard_app, &sep, &hide, &hide_others, &show_all, &sep2, &quit]
             } else {
                 // Save as App is there in a finished app too, greyed out until
@@ -388,6 +394,10 @@ fn main() {
             app.set_menu(Menu::with_items(h, &[&app_menu, &edit, &window])?)?;
             app.manage(NetToggle { flag: net.clone(), item: internet.clone(), folder: folder.clone() });
 
+            if manager {
+                who::watch(app.handle().clone(), save_app, discard_app);
+                return Ok(());
+            }
             // Reload when a change or an undo rewrites the app's file, and keep
             // Undo enabled only when there is something to undo.
             let handle = app.handle().clone();
@@ -435,16 +445,19 @@ fn main() {
                                 let _ = a.eval(ghost_js(&m["ghost"]));
                             }
                         }
-                        // Installed: the finished app opens in this one's place.
                         let moved = watch.with_extension("moved");
+                        // Installed: the finished app opens in this one's place.
+                        // Discarded: long enough to read so, then gone.
                         if moved.exists() {
-                            // Discarded: long enough to read so. Saved: the app is
-                            // already growing out of this window's icon.
                             let saved = !std::fs::read_to_string(&moved).unwrap_or_default().contains("discarded");
                             std::thread::sleep(Duration::from_millis(if saved { 900 } else { 1800 }));
                             handle.exit(0);
                             return;
                         }
+                    }
+                    // Saved: the app view is on its way into the Dock; never reload it.
+                    if making && !watch.exists() {
+                        reload_at = None;
                     }
                     if reload_at.is_some_and(|t| t.elapsed() >= Duration::from_millis(if making { 900 } else { 300 })) {
                         reload_at = None;

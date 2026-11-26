@@ -23,14 +23,15 @@ pub(crate) fn read_json(p: &Path) -> Value {
 
 /// Everything the column shows, read from the app's own folder.
 #[tauri::command]
-pub fn talk_state(webview: tauri::Webview, me: State<App>) -> Result<Value, String> {
+pub fn talk_state(webview: tauri::Webview, who: State<Who>) -> Result<Value, String> {
     only_talk(&webview)?;
+    let me = who.me(&webview)?;
+    let moved = me.folder.with_extension("moved");
     let story: Vec<Value> = std::fs::read_to_string(me.folder.join("story.jsonl"))
         .unwrap_or_default()
         .lines()
         .filter_map(|l| serde_json::from_str(l).ok())
         .collect();
-    let moved = me.folder.with_extension("moved");
     // The draft's icon, for the Save as App card.
     let icon = if me.making {
         std::fs::read(me.folder.join("icon.svg"))
@@ -39,16 +40,23 @@ pub fn talk_state(webview: tauri::Webview, me: State<App>) -> Result<Value, Stri
     } else {
         None
     };
+    let making = read_json(&me.folder.join("making.json"));
     Ok(
-        json!({ "mode": if me.making { "making" } else { "app" }, "name": me.name, "making": read_json(&me.folder.join("making.json")), "icon": icon,
+        json!({ "mode": if me.making { "making" } else { "app" }, "name": me.name, "making": making, "icon": icon,
                "story": story, "moved": moved.exists().then(|| read_json(&moved)),
-               "pending": me.folder.join(".pending/app/index.html").exists() }),
+               "pending": me.folder.join(".pending/app/index.html").exists(),
+               // Shown in OpenAs's own window, which has a way back to Home.
+               "home": who.home.manager,
+               // What the person first asked for: a build carried on after a
+               // stop shows it above "Continue".
+               "first": if me.making { std::fs::read_to_string(me.folder.join("prompt.txt")).ok().map(|t| t.trim().to_string()) } else { None } }),
     )
 }
 
 #[tauri::command]
-pub fn talk_note(text: String, webview: tauri::Webview, me: State<App>) -> Result<(), String> {
+pub fn talk_note(text: String, webview: tauri::Webview, who: State<Who>) -> Result<(), String> {
     only_talk(&webview)?;
+    let me = who.me(&webview)?;
     use std::io::Write;
     let text: String = text.trim().chars().take(2000).collect();
     if text.is_empty() {
@@ -69,32 +77,84 @@ pub fn talk_choose(
     save: bool,
     name: String,
     webview: tauri::Webview,
-    me: State<App>,
+    who: State<Who>,
 ) -> Result<(), String> {
     only_talk(&webview)?;
+    let me = who.me(&webview)?;
     if !me.making {
         return Err("not allowed".into());
     }
     if !save {
+        // A build that stopped or failed has no process waiting for the
+        // choice: throw the draft away here.
+        if build_ended(&me.folder) {
+            std::fs::write(me.folder.with_extension("moved"), json!({ "discarded": true }).to_string())
+                .map_err(|e| e.to_string())?;
+            let _ = std::fs::remove_dir_all(&me.folder);
+            return Ok(());
+        }
         return std::fs::write(me.folder.with_extension("discard"), "").map_err(|e| e.to_string());
     }
+    if build_ended(&me.folder) {
+        return Err("it didn't finish: continue it first".into());
+    }
     std::fs::write(me.folder.with_extension("keep"), name).map_err(|e| e.to_string())?;
-    // The window becomes the app while it's installed.
-    let (h, folder) = (webview.app_handle().clone(), me.folder.clone());
-    std::thread::spawn(move || becoming::close_in(h, folder));
+    Ok(())
+}
+
+/// The draft's build stopped or failed, so no process is working on it.
+fn build_ended(folder: &Path) -> bool {
+    matches!(read_json(&folder.join("making.json"))["phase"].as_str(), Some("stopped" | "failed"))
+}
+
+/// Carries on with a draft whose build stopped or failed: the build starts
+/// again in the same folder, from the files it had written, with the
+/// person's note if they gave one.
+#[tauri::command]
+pub fn talk_continue(text: String, webview: tauri::Webview, who: State<Who>) -> Result<(), String> {
+    only_talk(&webview)?;
+    let me = who.me(&webview)?;
+    if !me.making || !build_ended(&me.folder) {
+        return Err("not allowed".into());
+    }
+    let helper = me.helper.clone().ok_or("this window doesn't know where OpenAs is")?;
+    let first = std::fs::read_to_string(me.folder.join("prompt.txt")).unwrap_or_default();
+    let note: String = text.trim().chars().take(2000).collect();
+    let started = me.folder.join("app/index.html").exists();
+    let request = match (started, note.is_empty()) {
+        (true, true) => format!("It stopped before it was finished. The person first asked for:\n\n{}\n\nFinish building it.", first.trim()),
+        (true, false) => format!("It stopped before it was finished. The person first asked for:\n\n{}\n\nFinish building it. They add: {note}", first.trim()),
+        (false, true) => first.trim().to_string(),
+        (false, false) => format!("{}\n\n{note}", first.trim()),
+    };
+    let shown = if note.is_empty() { "Continue".to_string() } else { note.clone() };
+    std::fs::write(me.folder.join("continue.json"), json!({ "request": request, "shown": shown }).to_string())
+        .map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(me.folder.join("stop"));
+    std::process::Command::new(&helper)
+        .arg("make-run")
+        .arg(&me.folder)
+        .envs(me.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("couldn't start OpenAs ({}): {e}", helper.display()))?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn talk_stop(webview: tauri::Webview, me: State<App>) -> Result<(), String> {
+pub fn talk_stop(webview: tauri::Webview, who: State<Who>) -> Result<(), String> {
     only_talk(&webview)?;
+    let me = who.me(&webview)?;
     std::fs::write(me.folder.join("stop"), "").map_err(|e| e.to_string())
 }
 
 /// The app's files, read only, for "Show code".
 #[tauri::command]
-pub fn talk_code(webview: tauri::Webview, me: State<App>) -> Result<Value, String> {
+pub fn talk_code(webview: tauri::Webview, who: State<Who>) -> Result<Value, String> {
     only_talk(&webview)?;
+    let me = who.me(&webview)?;
     let mut files = vec![];
     for e in std::fs::read_dir(me.folder.join("app"))
         .map_err(|e| e.to_string())?
@@ -111,8 +171,9 @@ pub fn talk_code(webview: tauri::Webview, me: State<App>) -> Result<Value, Strin
 }
 
 #[tauri::command]
-pub fn talk_close(webview: tauri::Webview, app: AppHandle, me: State<App>) -> Result<(), String> {
+pub fn talk_close(webview: tauri::Webview, app: AppHandle, who: State<Who>) -> Result<(), String> {
     only_talk(&webview)?;
+    let me = who.me(&webview)?;
     if !me.making {
         show_talk(&app, false);
     }
@@ -121,8 +182,8 @@ pub fn talk_close(webview: tauri::Webview, app: AppHandle, me: State<App>) -> Re
 
 /// Lays out the app and the column side by side in the window.
 pub(crate) fn layout(app: &AppHandle) {
-    if becoming::BECOMING.load(Ordering::SeqCst) {
-        return;
+    if app.state::<Who>().home.manager {
+        return who::layout(app);
     }
     let Some(win) = app.get_window("main") else {
         return;

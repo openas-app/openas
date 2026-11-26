@@ -35,7 +35,8 @@ pub(crate) fn oa_bridge(name: &str) -> String {
     start: req => call("helper_start", {{ req }}), poll: (job, seen) => call("helper_poll", {{ job, seen }}),
     stop: job => call("helper_stop", {{ job }}), close: () => call("close_sheet"),
     state: () => call("talk_state"), note: text => call("talk_note", {{ text }}), stopMaking: () => call("talk_stop"),
-    code: () => call("talk_code"), hide: () => call("talk_close"), choose: (save, name) => call("talk_choose", {{ save, name }}), shared: () => call("shared_pending") }});
+    code: () => call("talk_code"), hide: () => call("talk_close"), choose: (save, name) => call("talk_choose", {{ save, name }}), carryOn: text => call("talk_continue", {{ text }}), shared: () => call("shared_pending"),
+    drafts: () => call("drafts_list"), showDraft: id => call("draft_show", {{ id }}), home: () => call("draft_home") }});
 }})();"#,
         name = serde_json::to_string(name).unwrap()
     )
@@ -137,5 +138,42 @@ pub(crate) fn restore_frame(w: &tauri::Window, folder: &Path) {
             let _ = w.set_size(PhysicalSize::new(wd as u32, ht as u32));
             let _ = w.set_position(PhysicalPosition::new(x as i32, y as i32));
         }
+    }
+}
+
+pub(crate) type Reply = http::Response<Cow<'static, [u8]>>;
+
+pub(crate) fn respond(bytes: Vec<u8>, mime: &str, csp: &str) -> Reply {
+    http::Response::builder()
+        .header("Content-Type", mime)
+        .header("Cache-Control", "no-store")
+        .header("Content-Security-Policy", csp)
+        .body(Cow::Owned(bytes))
+        .unwrap()
+}
+
+pub(crate) fn not_found() -> Reply {
+    http::Response::builder()
+        .status(404)
+        .body(Cow::Borrowed(&b""[..]))
+        .unwrap()
+}
+
+/// A file from an app's folder: only files inside `dir`, no climbing out
+/// with "..". Before the app's first page exists, the waiting page.
+pub(crate) fn serve_dir(dir: &Path, rel: &str, csp: &str) -> Reply {
+    let rel = if rel.is_empty() { "index.html" } else { rel };
+    let path = dir.join(rel);
+    if rel == "index.html" && !path.exists() {
+        return respond(WAITING_PAGE.as_bytes().to_vec(), "text/html", &policy(false));
+    }
+    let inside = path
+        .canonicalize()
+        .ok()
+        .zip(dir.canonicalize().ok())
+        .is_some_and(|(p, r)| p.starts_with(r));
+    match std::fs::read(&path) {
+        Ok(bytes) if inside => respond(bytes, mime(&path), csp),
+        _ => not_found(),
     }
 }

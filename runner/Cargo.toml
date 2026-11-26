@@ -24,3 +24,6 @@ tauri-plugin-dialog = "2"
 trash = "5"
 tauri-plugin-global-shortcut = "2"
 libc = "0.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"

@@ -3409,6 +3409,7 @@ version = "0.1.0"
 dependencies = [
  "dirs",
  "libc",
+ "objc2",
  "plist",
  "serde",
  "serde_json",
