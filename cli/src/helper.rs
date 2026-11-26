@@ -157,7 +157,10 @@ fn allowed(caller: &Caller, op: &str, app: Option<&str>) -> bool {
     match caller {
         Caller::Owner | Caller::Manager => true,
         Caller::App(id) => {
-            matches!(op, "change" | "undo" | "versions" | "restore") && app == Some(id.as_str())
+            matches!(
+                op,
+                "change" | "save_change" | "discard_change" | "undo" | "versions" | "restore"
+            ) && app == Some(id.as_str())
         }
     }
 }
@@ -191,11 +194,6 @@ fn b64(bytes: &[u8]) -> String {
     out
 }
 
-fn outcome_json(o: &make::Outcome) -> Value {
-    json!({ "id": o.info.id, "name": o.info.name, "installed": o.info.installed, "problems": o.problems, "warning": o.warning,
-            "tokens": o.spend.tokens, "cost": if o.spend.cost_unknown { Value::Null } else { json!(o.spend.cost) } })
-}
-
 /// One request to the Helper, as its `op` names it. Unknown fields are
 /// ignored; a missing one is an error before anything runs.
 #[derive(Debug, serde::Deserialize)]
@@ -227,6 +225,13 @@ pub enum Request {
     Change {
         app: String,
         request: String,
+    },
+    /// Keep the edits made since the last save (Save as App), or drop them.
+    SaveChange {
+        app: String,
+    },
+    DiscardChange {
+        app: String,
     },
     Versions {
         app: String,
@@ -288,6 +293,8 @@ impl Request {
             Request::Discard { .. } => "discard",
             Request::Rename { .. } => "rename",
             Request::Change { .. } => "change",
+            Request::SaveChange { .. } => "save_change",
+            Request::DiscardChange { .. } => "discard_change",
             Request::Versions { .. } => "versions",
             Request::Restore { .. } => "restore",
             Request::Undo { .. } => "undo",
@@ -309,6 +316,8 @@ impl Request {
         match self {
             Request::Rename { app, .. }
             | Request::Change { app, .. }
+            | Request::SaveChange { app }
+            | Request::DiscardChange { app }
             | Request::Versions { app }
             | Request::Restore { app, .. }
             | Request::Undo { app }
@@ -379,26 +388,25 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
             Ok(json!({ "id": info.id, "name": info.name }))
         }
         Request::Change { app, request } => {
-            let app = app.as_str();
-            // Apps made in steps are changed in steps (proof of concept).
-            let stepwise = make::find(app)
-                .ok()
-                .and_then(|f| std::fs::read_to_string(f.join("app.json")).ok())
-                .is_some_and(|t| t.contains("\"anthropic\""));
-            if stepwise {
-                let (_, f) = openas_core::agent::change(app, &request, ev)?;
-                return Ok(json!({ "id": app, "problems": [], "summary": f.summary }));
-            }
-            let o = make::change(app, &request, ev)?;
-            log_usage(app, op, &o.spend, caller);
-            Ok(outcome_json(&o))
+            let (_, f) = openas_core::agent::change(&app, &request, ev)?;
+            Ok(json!({ "id": app, "problems": [], "summary": f.summary, "pending": true }))
+        }
+        Request::SaveChange { app } => {
+            openas_core::agent::save_change(&app)?;
+            Ok(json!({ "saved": true }))
+        }
+        Request::DiscardChange { app } => {
+            openas_core::agent::discard_change(&app)?;
+            Ok(json!({ "discarded": true }))
         }
         Request::Versions { app } => Ok(json!({ "versions": make::versions(&app)? })),
         Request::Restore { app, version } => {
+            openas_core::agent::discard_change(&app)?;
             make::restore(&app, version)?;
             Ok(json!({ "restored": true }))
         }
         Request::Undo { app } => {
+            openas_core::agent::discard_change(&app)?;
             make::undo(&app)?;
             Ok(json!({ "undone": true }))
         }

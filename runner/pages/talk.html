@@ -148,7 +148,7 @@ function makingHtml(m) {
     else h += `<p class="summary">${prose(m.summary)}</p>`;
     if (S.mode === "making" && S.moved) h += `<div class="ready"><div><b>${S.moved.discarded ? "Discarded" : esc(chosenName || m.name) + " is saved"}</b><span>${S.moved.discarded ? "Nothing was added to your Applications." : "Opening it from your Applications…"}</span></div></div>`;
     else if (S.mode === "making" && chosenName != null) h += `<div class="ready"><div><b>Saving ${esc(chosenName || m.name)}…</b><span>Adding it to your Applications</span></div></div>`;
-    else if (S.mode === "making") h += `<div class="keep">${S.icon ? `<img src="${S.icon}" alt="">` : ""}<div class="kn"><input id="keepName" value="${esc(m.name)}" spellcheck="false" aria-label="App name"><span>Try it on the left. Save it to add it to your Applications.</span></div></div>
+    else if (S.mode === "making") h += `<div class="keep">${S.icon ? `<img src="${S.icon}" alt="">` : ""}<div class="kn"><input id="keepName" value="${esc(m.name)}" spellcheck="false" aria-label="App name"><span>Try it on the left. Saved, it becomes an app with its own window and icon. It can't reach your files or run programs unless you allow it.</span></div></div>
       <div class="keepActs"><button class="btn save" data-act="save">Save as App</button><span class="link" role="button" tabindex="0" data-act="discard">Discard</span></div>`;
     h += `<div class="meta">${m.model ? esc(modelName(m.model)) + " · " : ""}${m.minutes} min · ${m.step} steps${m.usd != null ? " · $" + Number(m.usd).toFixed(2) : ""}<span class="grow"></span><span class="link" role="button" tabindex="0" data-act="code">Show code</span></div>`;
   } else if (m.phase === "failed") {
@@ -200,6 +200,9 @@ function render() {
   if (S.mode === "making") h = m ? makingHtml(m) : "";
   else {
     h = storyHtml();
+    // Edits are a try-out until they're saved.
+    if (S.pending && !(m && active(m))) h += `<div class="keep"><div class="kn"><b>Edited, not saved yet</b><span>Try it on the left. Save as App to keep it, or Discard to go back to the saved app.</span></div></div>
+      <div class="keepActs"><button class="btn save" data-act="save-change">Save as App</button><span class="link" role="button" tabindex="0" data-act="discard-change">Discard</span></div>`;
     const recentEnd = m && ["failed", "stopped"].includes(m.phase) && Date.now() / 1000 - (m.now || 0) < 30;
     if (m && (active(m) || recentEnd)) h += makingHtml(m);
   }
@@ -276,6 +279,12 @@ document.addEventListener("click", async e => {
     chosenName = save ? ($("keepName") ? $("keepName").value.trim() : "") : null;
     if (!save) a.textContent = "Discarding…";
     await oa.choose(save, chosenName || "");
+    return;
+  }
+  if (a.dataset.act === "save-change" || a.dataset.act === "discard-change") {
+    const save = a.dataset.act === "save-change";
+    a.textContent = save ? "Saving…" : "Discarding…";
+    await run({ op: save ? "save_change" : "discard_change" }); await loadVersions();
     return;
   }
   if (a.dataset.act === "restore") {

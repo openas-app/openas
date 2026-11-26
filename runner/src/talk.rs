@@ -41,7 +41,8 @@ pub fn talk_state(webview: tauri::Webview, me: State<App>) -> Result<Value, Stri
     };
     Ok(
         json!({ "mode": if me.making { "making" } else { "app" }, "name": me.name, "making": read_json(&me.folder.join("making.json")), "icon": icon,
-               "story": story, "moved": moved.exists().then(|| read_json(&moved)) }),
+               "story": story, "moved": moved.exists().then(|| read_json(&moved)),
+               "pending": me.folder.join(".pending/app/index.html").exists() }),
     )
 }
 
@@ -74,12 +75,14 @@ pub fn talk_choose(
     if !me.making {
         return Err("not allowed".into());
     }
-    let (path, text) = if save {
-        (me.folder.with_extension("keep"), name)
-    } else {
-        (me.folder.with_extension("discard"), String::new())
-    };
-    std::fs::write(path, text).map_err(|e| e.to_string())
+    if !save {
+        return std::fs::write(me.folder.with_extension("discard"), "").map_err(|e| e.to_string());
+    }
+    std::fs::write(me.folder.with_extension("keep"), name).map_err(|e| e.to_string())?;
+    // The window becomes the app while it's installed.
+    let (h, folder) = (webview.app_handle().clone(), me.folder.clone());
+    std::thread::spawn(move || becoming::close_in(h, folder));
+    Ok(())
 }
 
 #[tauri::command]
@@ -118,6 +121,9 @@ pub fn talk_close(webview: tauri::Webview, app: AppHandle, me: State<App>) -> Re
 
 /// Lays out the app and the column side by side in the window.
 pub(crate) fn layout(app: &AppHandle) {
+    if becoming::BECOMING.load(Ordering::SeqCst) {
+        return;
+    }
     let Some(win) = app.get_window("main") else {
         return;
     };

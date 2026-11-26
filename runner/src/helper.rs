@@ -141,7 +141,14 @@ pub(crate) fn vet(webview: &tauri::Webview, me: &App, mut req: Value) -> Result<
             if !me.making
                 && matches!(
                     req.get("op").and_then(Value::as_str),
-                    Some("change" | "versions" | "restore" | "undo")
+                    Some(
+                        "change"
+                            | "save_change"
+                            | "discard_change"
+                            | "versions"
+                            | "restore"
+                            | "undo"
+                    )
                 ) =>
         {
             req["app"] = json!(me.app_id());

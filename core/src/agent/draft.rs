@@ -22,14 +22,30 @@ pub fn new_draft(request: &str, ev: &make::Events) -> Result<(PathBuf, Finished)
 
 /// A change, made on a copy. The live app only changes when the builder
 /// finishes; the old version is kept whole in history/<n>/.
+/// Where a change waits to be saved: the app's files as changed, beside the
+/// saved ones, until Save as App moves them in or Discard throws them away.
+pub fn pending_dir(folder: &Path) -> PathBuf {
+    folder.join(".pending")
+}
+
+/// Makes a change as a try-out. The app shows it, but nothing is kept until
+/// `save_change`; a second change builds on the first. The app's data is
+/// never touched (the builder works on a copy).
 pub fn change(app: &str, request: &str, ev: &make::Events) -> Result<(PathBuf, Finished)> {
     let folder = make::find(app)?;
+    let pending = pending_dir(&folder);
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
     let stage = paths::apps().join(format!(".stage-{app}-{nanos}"));
-    copy_dir(&folder.join("app"), &stage.join("app"))?;
+    // On top of an edit not yet saved, or the saved app.
+    let base = if pending.join("app/index.html").exists() {
+        pending.join("app")
+    } else {
+        folder.join("app")
+    };
+    copy_dir(&base, &stage.join("app"))?;
     for f in ["icon.svg", "permissions.json"] {
         if folder.join(f).exists() {
             std::fs::copy(folder.join(f), stage.join(f))?;
@@ -50,32 +66,70 @@ pub fn change(app: &str, request: &str, ev: &make::Events) -> Result<(PathBuf, F
             return Err(e);
         }
     };
-    make::snapshot(&folder)?;
-    let old = folder.join(".app-old");
-    let _ = std::fs::remove_dir_all(&old);
-    std::fs::rename(folder.join("app"), &old)?;
-    std::fs::rename(stage.join("app"), folder.join("app"))?;
-    let _ = std::fs::remove_dir_all(&old);
-    make::set_label(&folder, request)?;
+    // The new try-out replaces the last one; what was asked accumulates for
+    // the version's label.
+    let mut asked = std::fs::read_to_string(pending.join("requests.txt")).unwrap_or_default();
+    asked.push_str(request.trim());
+    asked.push('\n');
+    let next = folder.join(format!(".pending-{nanos}"));
+    std::fs::create_dir_all(&next)?;
+    std::fs::rename(stage.join("app"), next.join("app"))?;
     if stage.join("window.json").exists() {
-        std::fs::copy(stage.join("window.json"), folder.join("window.json"))?;
+        std::fs::copy(stage.join("window.json"), next.join("window.json"))?;
     }
+    std::fs::write(next.join("requests.txt"), asked)?;
+    let _ = std::fs::remove_dir_all(&pending);
+    std::fs::rename(&next, &pending)?;
     // The build's log goes with the app, after any earlier builds' logs.
-    {
-        let f = "agent.jsonl";
-        if let Ok(t) = std::fs::read_to_string(stage.join(f)) {
-            use std::io::Write;
-            if let Ok(mut o) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(folder.join(f))
-            {
-                let _ = o.write_all(t.as_bytes());
-            }
+    if let Ok(t) = std::fs::read_to_string(stage.join("agent.jsonl")) {
+        use std::io::Write;
+        if let Ok(mut o) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(folder.join("agent.jsonl"))
+        {
+            let _ = o.write_all(t.as_bytes());
         }
     }
     let _ = std::fs::remove_dir_all(&stage);
     Ok((folder, f))
+}
+
+/// Save as App after edits: the try-out becomes the app's new version. The
+/// version before it is kept, so Undo and Versions can go back.
+pub fn save_change(app: &str) -> Result<()> {
+    let folder = make::find(app)?;
+    let pending = pending_dir(&folder);
+    if !pending.join("app/index.html").exists() {
+        bail!("there are no edits to save");
+    }
+    make::snapshot(&folder)?;
+    let old = folder.join(".app-old");
+    let _ = std::fs::remove_dir_all(&old);
+    std::fs::rename(folder.join("app"), &old)?;
+    std::fs::rename(pending.join("app"), folder.join("app"))?;
+    let _ = std::fs::remove_dir_all(&old);
+    let asked = std::fs::read_to_string(pending.join("requests.txt")).unwrap_or_default();
+    let label = asked
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .collect::<Vec<_>>()
+        .join("; ");
+    make::set_label(&folder, if label.is_empty() { "Changes" } else { &label })?;
+    if pending.join("window.json").exists() {
+        std::fs::copy(pending.join("window.json"), folder.join("window.json"))?;
+    }
+    std::fs::remove_dir_all(&pending)?;
+    Ok(())
+}
+
+/// Discard after edits: back to the saved app, as if they never happened.
+pub fn discard_change(app: &str) -> Result<()> {
+    let pending = pending_dir(&make::find(app)?);
+    if pending.exists() {
+        std::fs::remove_dir_all(&pending)?;
+    }
+    Ok(())
 }
 
 pub(super) fn copy_dir(from: &Path, to: &Path) -> Result<()> {
@@ -187,8 +241,16 @@ pub fn make_run(ws: &Path) -> Result<()> {
     };
     let info = make::install_draft(ws, &name)?;
     let app = info.installed.clone().unwrap_or_default();
-    // The finished app opens once with its conversation beside it.
-    let _ = std::fs::write(paths::apps().join(&info.id).join(".just-made"), "");
+    let becoming = ws.with_extension("becoming");
+    if becoming.exists() {
+        // Saved from the making window, which closed in on the app's icon:
+        // the app's first window grows out of that spot.
+        let _ = std::fs::copy(&becoming, paths::apps().join(&info.id).join(".grow.json"));
+        let _ = std::fs::remove_file(&becoming);
+    } else {
+        // Otherwise it opens once with its conversation beside it.
+        let _ = std::fs::write(paths::apps().join(&info.id).join(".just-made"), "");
+    }
     std::fs::write(
         ws.with_extension("moved"),
         json!({ "id": info.id, "app": app }).to_string(),

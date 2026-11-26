@@ -80,6 +80,8 @@ fn main() -> Result<()> {
         }
         ["agent-change", app, request] => {
             let (folder, f) = openas_core::agent::change(app, request, &make::Events::lines(&say))?;
+            // From the command line, a change is kept straight away.
+            openas_core::agent::save_change(app)?;
             println!("changed: {}\nsummary: {}", folder.display(), f.summary);
         }
         ["make-start", request] => {

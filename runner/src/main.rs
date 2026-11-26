@@ -55,6 +55,7 @@ pub(crate) const TALK_W: f64 = 380.0;
 
 mod api;
 mod app;
+mod becoming;
 mod helper;
 mod serve;
 mod talk;
@@ -73,6 +74,9 @@ fn main() {
     let root_dir = me.folder.join("app");
     let folder = me.folder.clone();
     let index = root_dir.join("index.html");
+    // Edits not yet saved: the app shows them until Save as App or Discard.
+    let pending_root = me.folder.join(".pending/app");
+    let pending_index = pending_root.join("index.html");
     let title = me.name.clone();
     let mut context = tauri::generate_context!();
     if let Some(id) = &me.id {
@@ -109,7 +113,9 @@ fn main() {
                 "__oa/talk.html" => return ok(TALK_PAGE.as_bytes().to_vec(), "text/html", &policy(false)),
                 _ => {}
             }
-            // Only files inside <folder>/app; no climbing out with "..".
+            // Only files inside <folder>/app (or its edits waiting to be
+            // saved); no climbing out with "..".
+            let root_dir = if pending_root.join("index.html").exists() { &pending_root } else { &root_dir };
             let rel = if rel.is_empty() { "index.html" } else { rel };
             let path = root_dir.join(rel);
             if rel == "index.html" && !path.exists() {
@@ -163,6 +169,21 @@ fn main() {
             }
             "mb-quit" => app.exit(0),
             id if id.starts_with("mb:") => powers::emit(app, "menu-bar", json!(&id[3..])),
+            // The draft's menu presses the same buttons as the card in the column,
+            // so the name typed there is the one it's saved with.
+            "save-app" | "discard-app" if !app.state::<App>().making => {
+                let me = app.state::<App>();
+                let op = if event.id().as_ref() == "save-app" { "save_change" } else { "discard_change" };
+                let req = json!({ "op": op, "app": me.app_id() });
+                start_job(app, req);
+            }
+            "save-app" | "discard-app" => {
+                show_talk(app, true);
+                let act = if event.id().as_ref() == "save-app" { "save" } else { "discard" };
+                if let Some(t) = app.get_webview("talk") {
+                    let _ = t.eval(format!("document.querySelector('[data-act=\"{act}\"]')?.click()"));
+                }
+            }
             "undo-change" => {
                 let me = app.state::<App>();
                 let req = json!({ "op": "undo", "app": me.app_id() });
@@ -266,9 +287,11 @@ fn main() {
             let just_made = folder.join(".just-made");
             let open_talk = making || (split && just_made.exists());
             let _ = std::fs::remove_file(&just_made);
+            // Just saved from the making window: grow out of its icon.
+            let grow = if split && !making { becoming::take_grow(&folder) } else { None };
             let main: tauri::Window = if split {
                 let quiet_win = std::env::var("OPENAS_QUIET_WINDOW").is_ok();
-                let win = tauri::window::WindowBuilder::new(app, "main").title(&title).inner_size(start_w + if open_talk { TALK_W } else { 0.0 }, start_h).focused(!quiet_win).build()?;
+                let win = tauri::window::WindowBuilder::new(app, "main").title(&title).inner_size(start_w + if open_talk { TALK_W } else { 0.0 }, start_h).focused(!quiet_win).visible(grow.is_none()).decorations(grow.is_none()).build()?;
                 let ab = wire!(tauri::webview::WebviewBuilder::new("app", url("/index.html"))).initialization_script(bridge());
                 win.add_child(ab, tauri::LogicalPosition::new(0.0, 0.0), tauri::LogicalSize::new(start_w, start_h))?;
                 let tb = tauri::webview::WebviewBuilder::new("talk", url("/__oa/talk.html")).initialization_script(oa_bridge(&title));
@@ -283,7 +306,13 @@ fn main() {
                 }
                 win
             };
-            restore_frame(&main, &folder);
+            match grow {
+                Some((from, to)) => {
+                    let w = main.clone();
+                    std::thread::spawn(move || becoming::grow_out(w, from, to));
+                }
+                None => restore_frame(&main, &folder),
+            }
             layout(app.handle());
             let frame_file = folder.join(".window.json");
             let w2 = main.clone();
@@ -316,26 +345,26 @@ fn main() {
             let versions = MenuItem::with_id(h, "versions", "Versions…", !manager, None::<&str>)?;
             let share = MenuItem::with_id(h, "share", "Share…", !manager, None::<&str>)?;
             let internet = tauri::menu::CheckMenuItem::with_id(h, "internet", "Allow Internet Access", !manager, net.load(Ordering::SeqCst), None::<&str>)?;
-            let app_menu = Submenu::with_items(
-                h,
-                &title,
-                true,
-                &[
-                    &change,
-                    &undo,
-                    &versions,
-                    &PredefinedMenuItem::separator(h)?,
-                    &share,
-                    &PredefinedMenuItem::separator(h)?,
-                    &internet,
-                    &PredefinedMenuItem::separator(h)?,
-                    &PredefinedMenuItem::hide(h, None)?,
-                    &PredefinedMenuItem::hide_others(h, None)?,
-                    &PredefinedMenuItem::show_all(h, None)?,
-                    &PredefinedMenuItem::separator(h)?,
-                    &PredefinedMenuItem::quit(h, None)?,
-                ],
-            )?;
+            // While an app is being made, its menu is about the draft: save it
+            // as an app once it's done, or discard it.
+            let save_app = MenuItem::with_id(h, "save-app", "Save as App", false, None::<&str>)?;
+            let discard_app = MenuItem::with_id(h, "discard-app", if making { "Discard" } else { "Discard Changes" }, false, None::<&str>)?;
+            let sep = PredefinedMenuItem::separator(h)?;
+            let (hide, hide_others, show_all, quit) = (
+                PredefinedMenuItem::hide(h, None)?,
+                PredefinedMenuItem::hide_others(h, None)?,
+                PredefinedMenuItem::show_all(h, None)?,
+                PredefinedMenuItem::quit(h, None)?,
+            );
+            let (sep2, sep3, sep4, sep5) = (PredefinedMenuItem::separator(h)?, PredefinedMenuItem::separator(h)?, PredefinedMenuItem::separator(h)?, PredefinedMenuItem::separator(h)?);
+            let items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = if making {
+                vec![&save_app, &discard_app, &sep, &hide, &hide_others, &show_all, &sep2, &quit]
+            } else {
+                // Save as App is there in a finished app too, greyed out until
+                // there are edits to keep.
+                vec![&save_app, &discard_app, &sep5, &change, &undo, &versions, &sep, &share, &sep2, &internet, &sep3, &hide, &hide_others, &show_all, &sep4, &quit]
+            };
+            let app_menu = Submenu::with_items(h, &title, true, &items)?;
             let edit = Submenu::with_items(
                 h,
                 "Edit",
@@ -365,19 +394,27 @@ fn main() {
             let watch = folder.clone();
             std::thread::spawn(move || {
                 let version = watch.join("version.json");
-                let mut seen = (modified(&index), modified(&version));
+                let mut seen = (modified(&index), modified(&version), modified(&pending_index));
                 let (mut files_seq, mut ghost_seq, mut ghost_cleared) = (0u64, 0u64, false);
                 let mut reload_at: Option<std::time::Instant> = None;
                 loop {
                     std::thread::sleep(Duration::from_millis(250));
                     let app_view = handle.get_webview("app");
-                    let now = (modified(&index), modified(&version));
+                    let now = (modified(&index), modified(&version), modified(&pending_index));
+                    if !making {
+                        let edited = pending_index.exists();
+                        let _ = save_app.set_enabled(edited);
+                        let _ = discard_app.set_enabled(edited);
+                    }
                     if now.0.is_some() && now != seen {
                         seen = now;
                         reload_at = Some(std::time::Instant::now());
                     }
                     if making {
                         let m = read_json(&watch.join("making.json"));
+                        let ready = m["phase"] == "done" && !watch.with_extension("keep").exists() && !watch.with_extension("discard").exists();
+                        let _ = save_app.set_enabled(ready);
+                        let _ = discard_app.set_enabled(ready);
                         let fs = m["files_seq"].as_u64().unwrap_or(0);
                         if fs != files_seq {
                             files_seq = fs;
@@ -399,8 +436,12 @@ fn main() {
                             }
                         }
                         // Installed: the finished app opens in this one's place.
-                        if watch.with_extension("moved").exists() {
-                            std::thread::sleep(Duration::from_millis(1800));
+                        let moved = watch.with_extension("moved");
+                        if moved.exists() {
+                            // Discarded: long enough to read so. Saved: the app is
+                            // already growing out of this window's icon.
+                            let saved = !std::fs::read_to_string(&moved).unwrap_or_default().contains("discarded");
+                            std::thread::sleep(Duration::from_millis(if saved { 900 } else { 1800 }));
                             handle.exit(0);
                             return;
                         }

@@ -70,7 +70,10 @@ mod spend;
 mod tools;
 mod turn;
 
-pub use draft::{change, make_run, new_draft, prepare_draft, start_make};
+pub use draft::{
+    change, discard_change, make_run, new_draft, pending_dir, prepare_draft, save_change,
+    start_make,
+};
 pub use live::Live;
 pub use spend::{estimate, limits, spent, spent_this_month};
 pub use turn::run;
