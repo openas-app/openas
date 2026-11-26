@@ -60,7 +60,9 @@ pub fn change(app: &str, request: &str, ev: &make::Events) -> Result<(PathBuf, F
     if stage.join("window.json").exists() {
         std::fs::copy(stage.join("window.json"), folder.join("window.json"))?;
     }
-    for f in ["agent.jsonl"] {
+    // The build's log goes with the app, after any earlier builds' logs.
+    {
+        let f = "agent.jsonl";
         if let Ok(t) = std::fs::read_to_string(stage.join(f)) {
             use std::io::Write;
             if let Ok(mut o) = std::fs::OpenOptions::new()

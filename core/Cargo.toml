@@ -4,8 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
+repository.workspace = true
 readme = "../README.md"
 keywords.workspace = true
+categories.workspace = true
 description = "OpenAs: app folders, providers, building, checking and installing"
 
 [dependencies]

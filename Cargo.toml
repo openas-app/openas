@@ -8,7 +8,6 @@ edition = "2021"
 license = "MIT"
 homepage = "https://openas.app"
 repository = "https://github.com/openas-app/openas"
-readme = "README.md"
 keywords = ["macos", "tauri", "llm", "app-builder", "desktop"]
 categories = ["command-line-utilities", "gui"]
 

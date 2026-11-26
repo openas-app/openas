@@ -5,8 +5,10 @@ edition.workspace = true
 description = "OpenAs runner: one window that runs an app folder"
 license.workspace = true
 homepage.workspace = true
+repository.workspace = true
 readme = "../README.md"
 keywords.workspace = true
+categories.workspace = true
 
 [build-dependencies]
 tauri-build = { version = "=2.7.6", features = [] }
