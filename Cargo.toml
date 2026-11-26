@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["runner", "core", "cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+homepage = "https://openas.app"
+readme = "README.md"
+keywords = ["macos", "tauri", "llm", "app-builder", "desktop"]
+categories = ["command-line-utilities", "gui"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

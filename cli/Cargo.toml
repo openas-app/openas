@@ -1,0 +1,16 @@
+[package]
+name = "openas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+readme = "../README.md"
+keywords.workspace = true
+description = "OpenAs command line: new, change, undo, list"
+
+[dependencies]
+anyhow = "1"
+openas-core = { path = "../core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+libc = "0.2"

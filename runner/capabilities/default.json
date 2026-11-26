@@ -1,0 +1,14 @@
+{
+  "identifier": "default",
+  "description": "What an app page may call through Tauri's plugins: nothing. Notifications, files and the menu bar go through OpenAs' own commands, which check the person's grants.",
+  "windows": [
+    "main"
+  ],
+  "remote": {
+    "urls": [
+      "app://localhost/*",
+      "http://app.localhost/*"
+    ]
+  },
+  "permissions": []
+}

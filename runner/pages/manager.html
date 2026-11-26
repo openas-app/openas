@@ -1,0 +1,280 @@
+<!doctype html><html><head><meta charset="utf-8"><title>OpenAs</title>
+<style>
+:root{--bg:#F4F4F5;--card:#FFFFFF;--fg:#0B0B0C;--mute:#52525B;--faint:#71717A;--line:#D4D4D8;--line2:#E4E4E7;--accent:#0B0B0C;--on-accent:#FFFFFF;--signal:#FF4A1C;--bad:#B8452C;--seg-on:#FFFFFF;--shadow:none}
+@media (prefers-color-scheme:dark){:root{--bg:#0B0B0C;--card:#161618;--fg:#F4F4F5;--mute:#A1A1AA;--faint:#71717A;--line:#2E2E33;--line2:#232326;--accent:#FFFFFF;--on-accent:#0B0B0C;--signal:#FF4A1C;--bad:#E0785E;--seg-on:#3A3A40;--shadow:0 1px 2px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.35)}}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font:13px/1.45 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;-webkit-font-smoothing:antialiased;cursor:default;-webkit-user-select:none;user-select:none}
+main{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:64px 40px 26px}
+h1{font:700 30px/1.07 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.035em;margin:0 0 8px;text-align:center}
+.lead{color:var(--mute);margin:0 0 22px;font-size:14px;text-align:center}
+.composer{width:min(640px,100%);background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:16px 16px 12px}
+.composer:focus-within{border-color:color-mix(in srgb,var(--accent) 50%,var(--line))}
+textarea{display:block;width:100%;border:0;outline:0;resize:none;background:transparent;color:var(--fg);font:15.5px/1.5 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:72px;max-height:240px;padding:0;-webkit-user-select:text;user-select:text}
+textarea::placeholder{color:var(--faint)}
+.foot{display:flex;align-items:center;gap:10px;margin-top:10px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--line2);color:var(--mute);font-size:12px}
+.pill .dot{width:7px;height:7px;border-radius:0;background:var(--signal)}
+.pill.unset{color:var(--fg)}.pill.unset .dot{background:var(--faint)}
+.grow{flex:1}
+.go{font:600 13.5px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:8px 16px;border-radius:11px;border:0;background:var(--accent);color:var(--on-accent);cursor:default}
+.go:disabled{opacity:.45}
+@media (prefers-color-scheme:dark){.go{color:#10241a}}
+.msg{min-height:18px;margin-top:8px;color:var(--mute);font-size:12.5px;text-align:center}.msg.bad{color:var(--bad)}
+.ideas{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:min(640px,100%);margin:6px 0 0}
+.idea{padding:6px 11px;border:1px solid var(--line);border-radius:999px;color:var(--mute);font-size:12.5px}
+.idea:hover{color:var(--fg);border-color:var(--faint)}
+.shelf{width:min(640px,100%);margin-top:48px}
+.shelf h2{font-size:12px;font-weight:600;color:var(--mute);margin:0 0 12px}
+.apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px}
+.app{display:flex;flex-direction:column;align-items:center;gap:7px;padding:12px 4px;border-radius:12px;text-align:center}
+.app:hover{background:var(--line2)}
+.app img,.app .ph{width:64px;height:64px;border-radius:15px}
+.app .ph{border:1.5px dashed var(--line);display:grid;place-items:center}
+.app .ph i{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.app span{font-size:12.5px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app small{font-size:11px;color:var(--faint);margin-top:-5px}
+.empty{color:var(--faint);grid-column:1/-1;padding:8px 0}
+.note{margin-top:auto;padding-top:40px;color:var(--faint);font-size:11.5px;text-align:center}
+.pill{cursor:default}.pill:hover{color:var(--fg)}
+.cost{color:var(--faint);font-size:12px;font-variant-numeric:tabular-nums}
+[hidden]{display:none!important}
+/* A shared app someone sent */
+.veil{position:fixed;inset:0;background:rgba(0,0,0,.28);display:grid;place-items:center;z-index:10}
+.sheet{width:min(440px,calc(100% - 40px));background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.25);padding:22px}
+.sheet .top{display:flex;gap:14px;align-items:center}
+.sheet .top img{width:64px;height:64px;border-radius:15px;box-shadow:0 1px 3px rgba(0,0,0,.2);flex:none}
+.sheet input{font:600 16px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--fg);background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 6px;margin-left:-7px;width:100%;outline:0;-webkit-user-select:text;user-select:text}
+.sheet input:hover{border-color:var(--line)}.sheet input:focus{border-color:var(--accent);background:var(--bg)}
+.sheet .from{color:var(--mute);font-size:12.5px;margin-top:2px}
+.sheet .safe{margin:16px 0 0;padding:11px 12px;border-radius:10px;background:var(--line2);color:var(--mute);font-size:12.5px;line-height:1.45}
+.sheet .row2{display:flex;align-items:center;gap:12px;margin-top:16px}
+.sheet pre{margin:12px 0 0;max-height:240px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font:11.5px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;-webkit-user-select:text;user-select:text}
+.sheet .tabs{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.sheet .tabs span{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--mute)}
+.sheet .tabs span.on{color:var(--fg);border-color:var(--accent)}
+/* First run: choose who builds your apps */
+#setup .lead{margin-bottom:26px}
+.pick{width:min(520px,100%)}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);padding:3px;border-radius:11px;background:var(--line2);margin-bottom:18px}
+.seg button{font:500 13px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--mute);background:transparent;border:0;border-radius:8px;padding:7px 0;cursor:default}
+.seg button.on{background:var(--seg-on);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.provs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.prov{font:inherit;font-size:12.5px;cursor:default;padding:4px 11px;border:1px solid var(--line);border-radius:999px;color:var(--mute);background:transparent}
+.prov:hover{color:var(--fg)}.prov.on{color:var(--on-accent);border-color:var(--accent);background:var(--accent)}
+.list{background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden}
+.opt{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:12px;width:100%;padding:13px 16px;border:0;border-top:1px solid var(--line2);background:transparent;color:var(--fg);font:inherit;text-align:left;cursor:default}
+.opt:first-child{border-top:0}
+.opt:hover{background:color-mix(in srgb,var(--line2) 60%,transparent)}
+.opt .dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--faint)}
+.opt.on .dot{border:5px solid var(--accent)}
+.opt b{font-weight:500;font-size:13.5px}.opt small{display:block;color:var(--mute);font-size:12px;margin-top:1px}
+.opt .price{color:var(--mute);font-size:12.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.opt.on .price{color:var(--fg)}
+.opt input{margin-top:6px;width:100%;font:13px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 8px;outline:0;-webkit-user-select:text;user-select:text}
+.opt input:focus{border-color:var(--accent)}
+.keyline{display:flex;align-items:center;gap:10px;margin-top:14px;color:var(--mute);font-size:12.5px}
+.keyline input{flex:1;font:13px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;outline:0;-webkit-user-select:text;user-select:text}
+.keyline input:focus{border-color:var(--accent)}
+.keyline a,.keyline .link{color:var(--fg);text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line);flex:none}
+.hint{color:var(--faint);font-size:12px;margin-top:10px;line-height:1.45}
+.cont{display:block;width:100%;margin-top:18px;padding:10px 0;font-size:13.5px}
+.foot2{display:flex;justify-content:space-between;margin-top:10px;color:var(--faint);font-size:12px}
+.back{color:var(--mute)}.back:hover{color:var(--fg)}.back:hover{color:var(--fg)}
+</style></head><body>
+<main id="setup" hidden>
+<h1>Choose who builds your apps</h1>
+<p class="lead">OpenAs uses a model you bring. Your key stays in your Mac's Keychain.</p>
+<div class="pick">
+  <div class="seg" role="tablist">
+    <button data-kind="claude" role="tab">Claude</button><button data-kind="cloud" role="tab">Open models</button><button data-kind="local" role="tab">On this Mac</button>
+  </div>
+  <div class="provs" id="prov" role="radiogroup"></div>
+  <div class="list" id="opts" role="radiogroup"></div>
+  <div class="keyline" id="keyLine"></div>
+  <div class="hint" id="hint"></div>
+  <button class="go cont" id="connect">Continue</button>
+  <div class="foot2"><span id="note">A change costs about the same as a new app.</span><span class="back" id="back" role="button" tabindex="0">Back</span></div>
+  <div class="msg" id="cs"></div>
+</div>
+</main>
+<div class="veil" id="shareVeil" hidden><div class="sheet" role="dialog" aria-label="Shared app">
+  <div class="top"><img id="shIcon" alt=""><div style="flex:1;min-width:0"><input id="shName" spellcheck="false" aria-label="App name"><div class="from" id="shFrom"></div></div></div>
+  <div class="safe">Shared with you. It starts with no permissions and asks like any app you make. It can never get full access to your Mac. Once it's yours, you can change it by asking.</div>
+  <div id="shCode" hidden><div class="tabs" id="shTabs"></div><pre id="shSrc"></pre></div>
+  <div class="row2"><button class="go" id="shInstall">Save as App</button><span class="back" id="shShow" role="button" tabindex="0">Show code</span><span class="grow"></span><span class="back" id="shCancel" role="button" tabindex="0">Cancel</span></div>
+  <div class="msg" id="shMsg" style="text-align:left;min-height:0"></div>
+</div></div>
+<main id="home" hidden>
+<h1>What would you like to make?</h1>
+<p class="lead">Describe it. It's built as an app on your Mac, and you can change it later by asking.</p>
+<div class="composer">
+  <textarea id="t" autofocus placeholder="An app that…"></textarea>
+  <div class="foot"><span class="pill" id="pill" role="button" tabindex="0" title="Choose who builds your apps"><span class="dot"></span><span id="pillText"></span></span><span class="grow"></span><span class="cost" id="cost"></span><button class="go" id="g" disabled>Make app</button></div>
+</div>
+<div class="msg" id="s"></div>
+<div class="ideas" id="ideas"></div>
+<div class="shelf"><h2>Your apps</h2><div class="apps" id="list"></div></div>
+<p class="note">Apps live in your Applications folder. Their data stays on this Mac.</p>
+</main><script>
+const $ = id => document.getElementById(id);
+const IDEAS = ["A journal with a mood for each day", "An editor for my photos", "A budget for this month", "Flashcards to learn Spanish"];
+const run = req => new Promise(async res => {
+  try { const job = await oa.start(req); const tick = async () => { const r = await oa.poll(job); r.done ? res(r.done) : setTimeout(tick, 350); }; tick(); }
+  catch (e) { res({ error: String(e) }); }
+});
+const day = t => { if (!t) return ""; const d = new Date(t * 1000); return new Date().toDateString() === d.toDateString() ? "Today" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" }); };
+let making = [];
+async function load() {
+  const r = await run({ op: "list" });
+  if (r.error) { $("s").className = "msg bad"; $("s").textContent = "OpenAs couldn't start its helper: " + r.error; return; }
+  const apps = ((r.ok && r.ok.apps) || []).sort((a, b) => (b.created || 0) - (a.created || 0));
+  making = making.filter(m => Date.now() - m.t < 3600e3 && !apps.some(a => (a.created || 0) * 1000 >= m.t - 5000));
+  const L = $("list"); L.innerHTML = "";
+  for (const m of making) {
+    const d = document.createElement("div"); d.className = "app"; d.title = m.request;
+    d.innerHTML = '<div class="ph"><i></i></div><span></span><small>Being made</small>'; d.querySelector("span").textContent = m.request;
+    L.append(d);
+  }
+  for (const a of apps) {
+    const d = document.createElement("div"); d.className = "app";
+    d.innerHTML = '<img alt=""><span></span><small></small>';
+    d.querySelector("img").src = a.icon || ""; d.querySelector("span").textContent = a.name; d.querySelector("small").textContent = day(a.created);
+    d.onclick = () => run({ op: "open", app: a.id });
+    L.append(d);
+  }
+  if (!L.children.length) L.innerHTML = '<div class="empty">No apps yet. Describe one above.</div>';
+}
+for (const i of IDEAS) { const b = document.createElement("span"); b.className = "idea"; b.textContent = i; b.onclick = () => { $("t").value = i + ". "; $("t").focus(); upd(); }; $("ideas").append(b); }
+const upd = () => { $("g").disabled = !$("t").value.trim(); const t = $("t"); t.style.height = "auto"; t.style.height = Math.min(240, Math.max(72, t.scrollHeight)) + "px"; };
+$("t").addEventListener("input", upd);
+$("t").addEventListener("keydown", e => { if (e.key === "Enter" && (e.metaKey || !e.shiftKey)) { e.preventDefault(); $("g").click(); } });
+let makeAfter = false;
+$("g").onclick = async () => {
+  const request = $("t").value.trim(); if (!request) return;
+  // No model yet: choose one, then the app is made straight after.
+  if (S && !S.ready) { makeAfter = true; showSetup(false); return; }
+  $("g").disabled = true; $("s").className = "msg"; $("s").textContent = "Opening a window for it…";
+  const r = await run({ op: "make", request });
+  if (r.error) { $("s").className = "msg bad"; $("s").textContent = r.error; $("g").disabled = false; return; }
+  $("t").value = ""; upd(); $("s").textContent = "";
+  making.unshift({ request, t: Date.now() }); load();
+};
+// ---- Who builds the apps ---------------------------------------------------
+let S = null, kind = "claude", provId = "anthropic", model = "", replacing = false;
+const CLAUDE = { "claude-opus-5-5": "Claude Opus 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5", "claude-haiku-5-5": "Claude Haiku 5.5" };
+// Suggested models per provider, with a few words each; "other" lets you type any id.
+const SUGGEST = {
+  anthropic: [["claude-opus-5-5", "Opus 5.5", "The best apps"], ["claude-sonnet-5-5", "Sonnet 5.5", "Nearly as good, half the price"], ["claude-haiku-5-5", "Haiku 5.5", "Quick and cheap, for small tools"]],
+  huggingface: [["deepseek-ai/DeepSeek-V4.1-Flash:cheapest", "DeepSeek V4.1 Flash", "Fast and good all round"], ["zai-org/GLM-5.3:cheapest", "GLM 5.3", "Can't look at screenshots while checking"], ["moonshotai/Kimi-K3.1-Pro:cheapest", "Kimi K3.1 Pro", "The most polished open model"]],
+  openrouter: [["deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", "Fast and good all round"], ["z-ai/glm-5.3", "GLM 5.3", "Can't look at screenshots while checking"], ["moonshotai/kimi-k3.1-pro", "Kimi K3.1 Pro", "The most polished open model"]],
+};
+const ORDER = ["anthropic", "openrouter", "huggingface", "together", "groq", "fireworks", "ollama", "lmstudio", "vllm"];
+const nice = m => CLAUDE[m] || String(m || "").split(":")[0].split("/").pop();
+const usd = x => x >= 10 ? "$" + x.toFixed(0) : x >= 1 ? "$" + x.toFixed(2) : x > 0 ? Math.max(1, Math.round(x * 100)) + "¢" : "free";
+const prov = id => S && S.providers.find(p => p.id === id);
+const priceOf = e => !e ? "price unknown" : e.high === 0 ? "free" : "about " + usd(e.typical) + " an app";
+const estCache = {};
+async function est(p, m) {
+  const k = p + "|" + m; if (!(k in estCache)) { const r = await run({ op: "estimate", provider: p, model: m }); estCache[k] = r.ok ? r.ok.estimate : null; }
+  return estCache[k];
+}
+function showSetup(first) {
+  $("home").hidden = true; $("setup").hidden = false; $("back").hidden = !!first; $("cs").textContent = ""; replacing = false;
+  $("connect").textContent = makeAfter ? "Continue and make the app" : "Continue";
+  const p = prov(S.provider) || prov("anthropic");
+  pick(p.kind || "claude", p.id, S.build_model);
+}
+function pick(k, provider, m) {
+  kind = k;
+  document.querySelectorAll(".seg button").forEach(b => b.classList.toggle("on", b.dataset.kind === k));
+  const list = S.providers.filter(p => (p.kind || "cloud") === k).sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
+  provId = provider && list.some(p => p.id === provider) ? provider : list[0].id;
+  $("prov").hidden = k === "claude";
+  $("prov").innerHTML = list.map(p => `<button class="prov" role="radio" data-id="${p.id}">${p.name}</button>`).join("");
+  $("prov").querySelectorAll(".prov").forEach(b => b.onclick = () => { provId = b.dataset.id; replacing = false; drawProvider(); });
+  model = m || ""; drawProvider();
+}
+function drawProvider() {
+  $("prov").querySelectorAll(".prov").forEach(b => { b.classList.toggle("on", b.dataset.id === provId); b.setAttribute("aria-checked", b.dataset.id === provId); });
+  const p = prov(provId), rows = SUGGEST[provId] || [];
+  if (!rows.some(r => r[0] === model) && !(model && p.id === S.provider)) model = rows.length ? rows[0][0] : "";
+  const other = !rows.some(r => r[0] === model);
+  let h = rows.map(([id, name, what]) => `<button class="opt${id === model ? " on" : ""}" role="radio" data-m="${id}"><span class="dot"></span><span><b>${name}</b><small>${what}</small></span><span class="price" data-p="${id}"></span></button>`).join("");
+  if (p.kind !== "claude") h += `<div class="opt${other ? " on" : ""}" role="radio" data-m=""><span class="dot"></span><span><b>${rows.length ? "Another model" : "Model"}</b><small>${p.kind === "local" ? "The model's name, as " + p.name + " lists it" : "Any model id " + p.name + " offers"}</small>${other ? `<input id="mdl" spellcheck="false" placeholder="${p.kind === "local" ? "e.g. qwen3-coder" : "Model id"}" value="${other ? esc(model) : ""}">` : ""}</span><span class="price" data-p="${other ? esc(model) : ""}"></span></div>`;
+  $("opts").innerHTML = h;
+  $("opts").querySelectorAll(".opt").forEach(o => o.onclick = e => {
+    if (e.target.tagName === "INPUT") return;
+    if (o.dataset.m) model = o.dataset.m; else if (!other) model = "";
+    drawProvider(); if (!o.dataset.m && $("mdl")) $("mdl").focus();
+  });
+  if ($("mdl")) $("mdl").oninput = () => { model = $("mdl").value.trim(); fillPrices(); };
+  // The key: one line when it's saved; a field when it's missing or being replaced.
+  const k = $("keyLine"); k.hidden = !p.needs_key;
+  if (p.needs_key) k.innerHTML = p.has_key && !replacing
+    ? `<span>${p.name} key · saved in your Keychain</span><span class="grow"></span><span class="link" role="button" tabindex="0" id="replace">Replace</span>`
+    : `<input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your ${p.name} key">${p.key_url ? `<a href="${p.key_url}" target="_blank">Get a key</a>` : ""}`;
+  if ($("replace")) $("replace").onclick = () => { replacing = true; drawProvider(); $("key").focus(); };
+  $("hint").textContent = p.kind === "local" ? "Start " + p.name + " first. Building an app takes a capable model that can use tools: a 30B coding model or larger works best." : "";
+  $("hint").hidden = !$("hint").textContent;
+  fillPrices();
+}
+async function fillPrices() {
+  const p = prov(provId);
+  for (const el of $("opts").querySelectorAll(".price")) {
+    const m = el.closest(".opt").dataset.m || ($("mdl") ? model : "");
+    if (!m) { el.textContent = p.kind === "local" ? "free" : ""; continue; }
+    if (p.kind === "local") { el.textContent = "free"; continue; }
+    const e = await est(p.id, m); if (el.isConnected) el.textContent = priceOf(e);
+  }
+}
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { replacing = false; pick(b.dataset.kind); });
+$("back").onclick = () => { makeAfter = false; $("setup").hidden = true; $("home").hidden = false; $("t").focus(); };
+$("pill").onclick = () => showSetup(false);
+$("connect").onclick = async () => {
+  const p = prov(provId);
+  if (!model) { $("cs").className = "msg bad"; $("cs").textContent = "Choose a model first."; return; }
+  $("connect").disabled = true; $("cs").className = "msg"; $("cs").textContent = "Trying " + p.name + " with one tiny request…";
+  const r = await run({ op: "connect", provider: p.id, model, key: $("key") ? $("key").value : "" });
+  $("connect").disabled = false;
+  if (r.error || !(r.ok && r.ok.connected)) { $("cs").className = "msg bad"; $("cs").textContent = r.error || r.ok.message; return; }
+  await loadSettings(); $("setup").hidden = true; $("home").hidden = false; $("t").focus();
+  if (makeAfter) { makeAfter = false; upd(); $("g").click(); }
+};
+async function loadSettings() {
+  const r = await run({ op: "settings" });
+  if (r.error) { $("home").hidden = false; $("s").className = "msg bad"; $("s").textContent = "OpenAs couldn't start its helper: " + r.error; return; }
+  S = r.ok;
+  const p = prov(S.provider);
+  $("pillText").textContent = S.ready ? nice(S.build_model) + (p && p.kind !== "claude" ? " · " + p.name : "") : "Choose a model";
+  $("pill").classList.toggle("unset", !S.ready);
+  $("cost").textContent = !S.ready ? "" : p && p.kind === "local" ? "free" : S.estimate ? (S.estimate.high === 0 ? "free" : "about " + usd(S.estimate.typical) + " an app") : "";
+  if ($("setup").hidden) $("home").hidden = false;
+}
+// ---- Shared apps someone sent (opened with OpenAs) ---------------------------
+let shQueue = [], shFile = null;
+const svgUrl = svg => "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svg)));
+window.__shared = async () => { try { shQueue.push(...await oa.shared()); } catch (e) {} if (!shFile) nextShared(); };
+async function nextShared() {
+  shFile = shQueue.shift() || null; $("shareVeil").hidden = !shFile; if (!shFile) return;
+  $("shMsg").textContent = ""; $("shCode").hidden = true; $("shInstall").disabled = false; $("shShow").textContent = "Show code";
+  const r = await run({ op: "share_peek", file: shFile });
+  if (r.error || !r.ok) { $("shName").value = "Can't open this file"; $("shFrom").textContent = ""; $("shMsg").className = "msg bad"; $("shMsg").textContent = r.error; $("shInstall").disabled = true; return; }
+  const p = r.ok; $("shIcon").src = svgUrl(p.icon); $("shName").value = p.name;
+  $("shFrom").textContent = p.made_with ? "Made with " + nice(p.made_with) : "A shared app";
+  $("shTabs").innerHTML = ""; (p.files || []).forEach((f, i) => { const t = document.createElement("span"); t.textContent = f.name; t.className = i ? "" : "on";
+    t.onclick = () => { $("shTabs").querySelectorAll("span").forEach(x => x.className = ""); t.className = "on"; $("shSrc").textContent = f.text; }; $("shTabs").append(t); });
+  $("shSrc").textContent = p.files && p.files[0] ? p.files[0].text : "";
+}
+$("shShow").onclick = () => { $("shCode").hidden = !$("shCode").hidden; $("shShow").textContent = $("shCode").hidden ? "Show code" : "Hide code"; };
+$("shCancel").onclick = () => nextShared();
+$("shInstall").onclick = async () => {
+  $("shInstall").disabled = true; $("shMsg").className = "msg"; $("shMsg").textContent = "Adding it to your Applications…";
+  const r = await run({ op: "share_install", file: shFile, name: $("shName").value.trim() });
+  if (r.error) { $("shMsg").className = "msg bad"; $("shMsg").textContent = r.error; $("shInstall").disabled = false; return; }
+  load(); nextShared();
+};
+$("shName").addEventListener("keydown", e => { if (e.key === "Enter") $("shInstall").click(); });
+loadSettings().then(load).then(window.__shared); setInterval(load, 5000);
+</script></body></html>

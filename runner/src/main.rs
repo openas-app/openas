@@ -1,0 +1,457 @@
+//! OpenAs runner: the one window type. It opens an app folder
+//! (`<folder>/app/index.html`), serves it from its own `app://` origin, and
+//! gives the page `window.app`: `store` (JSON in `<folder>/data/`, which
+//! changes never touch) and `notify`. When the app's file changes on disk (a
+//! change or an undo), the window reloads.
+//!
+//! Its menu has "Change This App…" (a small sheet; the Helper does the work)
+//! and "Undo Last Change", plus the standard Edit menu (copy and paste).
+//!
+//! Which app: an installed copy reads its own Info.plist (`OAAppFolder`,
+//! `CFBundleName`, `CFBundleIdentifier`, `OAHelper`, `OAManager`) and ignores
+//! every flag, so nothing can launch it on another folder under its name. Only
+//! the bare Runner takes flags: `--app <folder> [--id <id>]`, and
+//! `--check <folder> --report <file>` for the load check (no window shown,
+//! nothing saved, exits when done).
+//!
+//! The manager ("OpenAs" itself) is a copy with `OAManager`: its window
+//! shows the built-in list and New App page and may make apps. An ordinary
+//! app's page can't reach the Helper at all; only its change sheet can, and
+//! only for this app.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
+
+use serde_json::{json, Map, Value};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::webview::{DownloadEvent, NewWindowResponse};
+use tauri::{
+    http, AppHandle, Manager, PhysicalPosition, PhysicalSize, State, WebviewUrl,
+    WebviewWindowBuilder, Window, WindowEvent,
+};
+use tauri_plugin_notification::NotificationExt;
+
+mod powers;
+
+pub(crate) const RUNNER_ID: &str = "app.openas.runner";
+pub(crate) const CHANGE_PAGE: &str = include_str!("../pages/change.html");
+pub(crate) const MANAGER_PAGE: &str = include_str!("../pages/manager.html");
+pub(crate) const VERSIONS_PAGE: &str = include_str!("../pages/versions.html");
+pub(crate) const TALK_PAGE: &str = include_str!("../pages/talk.html");
+/// Shown where the app will be, until its first file exists.
+pub(crate) const WAITING_PAGE: &str = r#"<!doctype html><meta charset="utf-8"><style>
+:root{color-scheme:light dark;--bg:#e9e7e2;--fg:#9d9b95;--line:#d6d3cb}@media (prefers-color-scheme:dark){:root{--bg:#141414;--fg:#74736e;--line:#353533}}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:13px -apple-system,system-ui,sans-serif;display:grid;place-items:center}
+.g{width:220px;height:150px;border-radius:14px;border:1.5px dashed var(--line);display:grid;place-items:center;margin:0 auto 12px}
+.g i{width:40px;height:40px;border-radius:11px;background:var(--line);opacity:.6;animation:p 2.4s ease-in-out infinite}@keyframes p{50%{opacity:.25}}
+</style><div><div class="g"><i></i></div>Your app opens here as soon as it runs.</div>"#;
+/// The conversation column's width (logical points).
+pub(crate) const TALK_W: f64 = 380.0;
+
+mod api;
+mod app;
+mod helper;
+mod serve;
+mod talk;
+
+use api::*;
+use app::*;
+use helper::*;
+use serve::*;
+use talk::*;
+
+fn main() {
+    let me = which_app();
+    let checking = me.check.clone();
+    let manager = me.manager;
+    let store = load_store(&me.folder, checking.is_none());
+    let root_dir = me.folder.join("app");
+    let folder = me.folder.clone();
+    let index = root_dir.join("index.html");
+    let title = me.name.clone();
+    let mut context = tauri::generate_context!();
+    if let Some(id) = &me.id {
+        context.config_mut().identifier = id.clone();
+    }
+    let downloads = dirs::download_dir().unwrap_or_else(std::env::temp_dir);
+    // Read once per page load (the menu toggle reloads the window).
+    let net = Arc::new(std::sync::atomic::AtomicBool::new(network_allowed(
+        &me.folder,
+    )));
+    let net_proto = net.clone();
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .register_uri_scheme_protocol("app", move |_ctx, req| {
+            let rel = req.uri().path().trim_start_matches('/');
+            let csp = policy(net_proto.load(Ordering::SeqCst));
+            let ok = |bytes: Vec<u8>, mime: &str, csp: &str| {
+                http::Response::builder()
+                    .header("Content-Type", mime)
+                    .header("Cache-Control", "no-store")
+                    .header("Content-Security-Policy", csp)
+                    .body(Cow::Owned(bytes))
+                    .unwrap()
+            };
+            // OpenAs' own pages: never any internet (the build preview
+            // inside the manager inherits this).
+            match rel {
+                "__oa/change.html" => return ok(CHANGE_PAGE.as_bytes().to_vec(), "text/html", &policy(false)),
+                "__oa/manager.html" => return ok(MANAGER_PAGE.as_bytes().to_vec(), "text/html", &policy(false)),
+                "__oa/versions.html" => return ok(VERSIONS_PAGE.as_bytes().to_vec(), "text/html", &policy(false)),
+                "__oa/talk.html" => return ok(TALK_PAGE.as_bytes().to_vec(), "text/html", &policy(false)),
+                _ => {}
+            }
+            // Only files inside <folder>/app; no climbing out with "..".
+            let rel = if rel.is_empty() { "index.html" } else { rel };
+            let path = root_dir.join(rel);
+            if rel == "index.html" && !path.exists() {
+                return ok(WAITING_PAGE.as_bytes().to_vec(), "text/html", &policy(false));
+            }
+            let inside = path.canonicalize().ok().zip(root_dir.canonicalize().ok()).is_some_and(|(p, r)| p.starts_with(r));
+            match std::fs::read(&path) {
+                Ok(bytes) if inside => ok(bytes, mime(&path), &csp),
+                _ => http::Response::builder().status(404).body(Cow::Borrowed(&b""[..])).unwrap(),
+            }
+        })
+        .manage(store)
+        .manage(me)
+        .manage(Jobs::default())
+        .manage(Inbox::default())
+        .manage(powers::Tray(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![store_get, store_set, notify, check_report, helper_start, helper_poll, helper_stop, close_sheet, talk_state, talk_note, talk_stop, talk_choose, shared_pending, talk_code, talk_close, powers::ask::perm_has, powers::perm_request, powers::files_op, powers::extras::menubar_set, powers::extras::menubar_clear, powers::extras::shortcuts_set, powers::extras::shortcuts_clear, powers::system_run, powers::extras::window_op])
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "change" | "versions" => show_talk(app, true),
+            "share" => {
+                // One file with the app's code and icon (never its data), shown in Finder.
+                let me = app.state::<App>();
+                let (Some(helper), id, env) = (me.helper.clone(), me.app_id(), me.env.clone()) else { return };
+                std::thread::spawn(move || {
+                    let out = std::process::Command::new(&helper).arg("share").arg(&id).envs(env).output();
+                    match out {
+                        Ok(o) if o.status.success() => {
+                            let file = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                            let _ = std::process::Command::new("/usr/bin/open").arg("-R").arg(file).status();
+                        }
+                        other => eprintln!("share failed: {other:?}"),
+                    }
+                });
+            }
+            "internet" => {
+                // Only the person, from the app's own menu, changes this.
+                let t = app.state::<NetToggle>();
+                let on = !t.flag.load(Ordering::SeqCst);
+                t.flag.store(on, Ordering::SeqCst);
+                let _ = t.item.set_checked(on);
+                let _ = std::fs::write(t.folder.join("permissions.json"), json!({ "network": on }).to_string());
+                if let Some(w) = app.get_webview("app").or_else(|| app.get_webview("main")) {
+                    let _ = w.eval("location.reload()");
+                }
+            }
+            "mb-open" => {
+                if let Some(w) = app.get_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
+            "mb-quit" => app.exit(0),
+            id if id.starts_with("mb:") => powers::emit(app, "menu-bar", json!(&id[3..])),
+            "undo-change" => {
+                let me = app.state::<App>();
+                let req = json!({ "op": "undo", "app": me.app_id() });
+                start_job(app, req);
+            }
+            _ => {}
+        })
+        .setup(move |app| {
+            #[cfg(target_os = "macos")]
+            if checking.is_some() || std::env::var("OPENAS_QUIET_WINDOW").is_ok() {
+                // The load check never shows in the Dock; nor do test windows,
+                // which also never take focus from the person at the Mac.
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
+            let page = if manager { "/__oa/manager.html" } else { "/index.html" };
+            // The size the app was made for (window.json, written by the builder).
+            let made: Value = std::fs::read_to_string(app.state::<App>().folder.join("window.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null);
+            let (start_w, start_h) = match (made.get("width").and_then(Value::as_f64), made.get("height").and_then(Value::as_f64)) {
+                (Some(w), Some(h)) if !manager => (w, h),
+                _ => if manager { (900.0, 720.0) } else { (900.0, 640.0) },
+            };
+            let dl = downloads.clone();
+            // The load check never sends anything to the browser: its page is
+            // unchecked, and nobody is there to have clicked.
+            // No browser tabs opened from a check or from the making window.
+            let quiet = checking.is_some() || app.state::<App>().making;
+            let (net_nav, net_win) = (net.clone(), net.clone());
+            // OpenAs' own window may open its few help links (a new window,
+            // like the token page) in the browser; it never navigates away.
+            let own_links = manager;
+            let making = app.state::<App>().making;
+            let split = !manager && checking.is_none();
+            macro_rules! wire {
+                ($b:expr) => {{
+                    let (net_nav, net_win, dl) = (net_nav.clone(), net_win.clone(), dl.clone());
+                    $b
+                // Links to the web open in the user's browser, never in the app window.
+                .on_navigation(move |u| {
+                    let web = matches!(u.scheme(), "http" | "https") && u.host_str() != Some("app.localhost");
+                    // A web link opens in the browser only if this app may use
+                    // the internet: otherwise a page could send data out in a URL.
+                    if web && !quiet && net_nav.load(Ordering::SeqCst) {
+                        let _ = std::process::Command::new(if cfg!(windows) { "explorer" } else { "open" }).arg(u.as_str()).spawn();
+                    }
+                    // The window stays on the app: web pages open in the browser,
+                    // and other schemes (file:, ssh:, …) go nowhere.
+                    let own = u.scheme() == "app" || u.host_str() == Some("app.localhost");
+                    own && !web || u.scheme() == "about" || u.scheme() == "data" || u.scheme() == "blob"
+                })
+                .on_new_window(move |u, _| {
+                    // Only web pages go to the browser; never file:, ssh:, other apps' schemes.
+                    if matches!(u.scheme(), "http" | "https") && !quiet && (own_links || net_win.load(Ordering::SeqCst)) {
+                        let _ = std::process::Command::new(if cfg!(windows) { "explorer" } else { "open" }).arg(u.as_str()).spawn();
+                    }
+                    NewWindowResponse::Deny
+                })
+                // Downloads (an app's Export button) land in Downloads.
+                .on_download(move |_w, event| {
+                    if let DownloadEvent::Requested { url, destination } = event {
+                        let name = destination
+                            .file_name()
+                            .map(|f| f.to_string_lossy().into_owned())
+                            .filter(|n| !n.is_empty())
+                            .or_else(|| url.path_segments().and_then(|mut s| s.next_back().map(str::to_string)))
+                            .filter(|n| !n.is_empty())
+                            .unwrap_or_else(|| "download".into());
+                        let mut path = dl.join(&name);
+                        let mut n = 2;
+                        while path.exists() {
+                            let p = Path::new(&name);
+                            let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                            let ext = p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+                            path = dl.join(format!("{stem} {n}{ext}"));
+                            n += 1;
+                        }
+                        *destination = path;
+                    }
+                    true
+                })
+                }};
+            }
+            let mut b = WebviewWindowBuilder::new(app, "main", url(page)).title(&title).inner_size(start_w, start_h);
+            if !split {
+                b = wire!(b);
+            }
+            b = if manager { b.initialization_script(oa_bridge("OpenAs")) } else { b.initialization_script(bridge()) };
+            if let Some(report) = checking.clone() {
+                b = b.initialization_script(CHECK).visible(false).focused(false).skip_taskbar(true);
+                // A page that never finishes loading still gets a report.
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_secs(20));
+                    let _ = std::fs::write(&report, json!({ "timeout": true }).to_string());
+                    handle.exit(0);
+                });
+            }
+            // An app's window holds two webviews: the app, and the conversation
+            // column beside it (hidden until asked for, open while it's made).
+            // Just made: the finished app opens with its conversation still
+            // beside it, so the story doesn't vanish at the hand-off.
+            let just_made = folder.join(".just-made");
+            let open_talk = making || (split && just_made.exists());
+            let _ = std::fs::remove_file(&just_made);
+            let main: tauri::Window = if split {
+                let quiet_win = std::env::var("OPENAS_QUIET_WINDOW").is_ok();
+                let win = tauri::window::WindowBuilder::new(app, "main").title(&title).inner_size(start_w + if open_talk { TALK_W } else { 0.0 }, start_h).focused(!quiet_win).build()?;
+                let ab = wire!(tauri::webview::WebviewBuilder::new("app", url("/index.html"))).initialization_script(bridge());
+                win.add_child(ab, tauri::LogicalPosition::new(0.0, 0.0), tauri::LogicalSize::new(start_w, start_h))?;
+                let tb = tauri::webview::WebviewBuilder::new("talk", url("/__oa/talk.html")).initialization_script(oa_bridge(&title));
+                win.add_child(tb, tauri::LogicalPosition::new(start_w, 0.0), tauri::LogicalSize::new(TALK_W, start_h))?;
+                app.manage(Talk { open: std::sync::atomic::AtomicBool::new(open_talk) });
+                win
+            } else {
+                let w = b.build()?;
+                let win = w.as_ref().window();
+                if checking.is_some() {
+                    return Ok(());
+                }
+                win
+            };
+            restore_frame(&main, &folder);
+            layout(app.handle());
+            let frame_file = folder.join(".window.json");
+            let w2 = main.clone();
+            let lh = app.handle().clone();
+            let ch = app.handle().clone();
+            main.on_window_event(move |e| {
+                // A menu bar app keeps running when its window closes.
+                if let WindowEvent::CloseRequested { api, .. } = e {
+                    if ch.state::<powers::Tray>().0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).is_some() {
+                        api.prevent_close();
+                        if let Some(w) = ch.get_window("main") {
+                            let _ = w.hide();
+                        }
+                    }
+                }
+                if matches!(e, WindowEvent::Resized(_)) {
+                    layout(&lh);
+                }
+                if matches!(e, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+                    if let (Ok(p), Ok(s)) = (w2.outer_position(), w2.inner_size()) {
+                        let _ = std::fs::write(&frame_file, json!({ "x": p.x, "y": p.y, "w": s.width, "h": s.height }).to_string());
+                    }
+                }
+            });
+
+            // The menu: the app's own items, then the standard Edit and Window menus.
+            let h = app.handle();
+            let change = MenuItem::with_id(h, "change", "Change This App…", !manager, None::<&str>)?;
+            let undo = MenuItem::with_id(h, "undo-change", "Undo Last Change", !manager && has_history(&folder), None::<&str>)?;
+            let versions = MenuItem::with_id(h, "versions", "Versions…", !manager, None::<&str>)?;
+            let share = MenuItem::with_id(h, "share", "Share…", !manager, None::<&str>)?;
+            let internet = tauri::menu::CheckMenuItem::with_id(h, "internet", "Allow Internet Access", !manager, net.load(Ordering::SeqCst), None::<&str>)?;
+            let app_menu = Submenu::with_items(
+                h,
+                &title,
+                true,
+                &[
+                    &change,
+                    &undo,
+                    &versions,
+                    &PredefinedMenuItem::separator(h)?,
+                    &share,
+                    &PredefinedMenuItem::separator(h)?,
+                    &internet,
+                    &PredefinedMenuItem::separator(h)?,
+                    &PredefinedMenuItem::hide(h, None)?,
+                    &PredefinedMenuItem::hide_others(h, None)?,
+                    &PredefinedMenuItem::show_all(h, None)?,
+                    &PredefinedMenuItem::separator(h)?,
+                    &PredefinedMenuItem::quit(h, None)?,
+                ],
+            )?;
+            let edit = Submenu::with_items(
+                h,
+                "Edit",
+                true,
+                &[
+                    &PredefinedMenuItem::undo(h, None)?,
+                    &PredefinedMenuItem::redo(h, None)?,
+                    &PredefinedMenuItem::separator(h)?,
+                    &PredefinedMenuItem::cut(h, None)?,
+                    &PredefinedMenuItem::copy(h, None)?,
+                    &PredefinedMenuItem::paste(h, None)?,
+                    &PredefinedMenuItem::select_all(h, None)?,
+                ],
+            )?;
+            let window = Submenu::with_items(
+                h,
+                "Window",
+                true,
+                &[&PredefinedMenuItem::minimize(h, None)?, &PredefinedMenuItem::maximize(h, None)?, &PredefinedMenuItem::close_window(h, None)?],
+            )?;
+            app.set_menu(Menu::with_items(h, &[&app_menu, &edit, &window])?)?;
+            app.manage(NetToggle { flag: net.clone(), item: internet.clone(), folder: folder.clone() });
+
+            // Reload when a change or an undo rewrites the app's file, and keep
+            // Undo enabled only when there is something to undo.
+            let handle = app.handle().clone();
+            let watch = folder.clone();
+            std::thread::spawn(move || {
+                let version = watch.join("version.json");
+                let mut seen = (modified(&index), modified(&version));
+                let (mut files_seq, mut ghost_seq, mut ghost_cleared) = (0u64, 0u64, false);
+                let mut reload_at: Option<std::time::Instant> = None;
+                loop {
+                    std::thread::sleep(Duration::from_millis(250));
+                    let app_view = handle.get_webview("app");
+                    let now = (modified(&index), modified(&version));
+                    if now.0.is_some() && now != seen {
+                        seen = now;
+                        reload_at = Some(std::time::Instant::now());
+                    }
+                    if making {
+                        let m = read_json(&watch.join("making.json"));
+                        let fs = m["files_seq"].as_u64().unwrap_or(0);
+                        if fs != files_seq {
+                            files_seq = fs;
+                            // Reload once the writing pauses, not on every edit.
+                            reload_at = Some(std::time::Instant::now());
+                        }
+                        // Done: the last check's pointer and caption leave the app.
+                        if m["phase"] == "done" && !ghost_cleared {
+                            ghost_cleared = true;
+                            if let Some(a) = &app_view {
+                                let _ = a.eval("document.getElementById('__oa_ghost')?.remove()");
+                            }
+                        }
+                        let gs = m["ghost"]["seq"].as_u64().unwrap_or(0);
+                        if gs != ghost_seq && m["phase"] != "done" {
+                            ghost_seq = gs;
+                            if let Some(a) = &app_view {
+                                let _ = a.eval(ghost_js(&m["ghost"]));
+                            }
+                        }
+                        // Installed: the finished app opens in this one's place.
+                        if watch.with_extension("moved").exists() {
+                            std::thread::sleep(Duration::from_millis(1800));
+                            handle.exit(0);
+                            return;
+                        }
+                    }
+                    if reload_at.is_some_and(|t| t.elapsed() >= Duration::from_millis(if making { 900 } else { 300 })) {
+                        reload_at = None;
+                        if let Some(a) = &app_view {
+                            let _ = a.eval("location.reload()");
+                        }
+                    }
+                    let _ = undo.set_enabled(!manager && !making && has_history(&watch));
+                }
+            });
+            Ok(())
+        })
+        .build(context)
+        .expect("runner failed to start")
+        .run(|app, e| {
+            // A click on the Dock icon brings back a window that was closed
+            // while the app kept running in the menu bar.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { has_visible_windows: false, .. } = e {
+                if let Some(w) = app.get_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            }
+            // A shared app file opened with OpenAs: the home window shows it.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &e {
+                if app.state::<App>().manager {
+                    let files: Vec<String> = urls.iter().filter_map(|u| u.to_file_path().ok()).filter(|p| p.extension().is_some_and(|x| x == "openas")).map(|p| p.to_string_lossy().into_owned()).collect();
+                    if !files.is_empty() {
+                        app.state::<Inbox>().0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).extend(files);
+                        if let Some(w) = app.get_webview("main") {
+                            let _ = w.eval("window.__shared && window.__shared()");
+                        }
+                        if let Some(w) = app.get_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                }
+            }
+            // The making window is gone: the build saves the app by itself.
+            if let tauri::RunEvent::Exit = e {
+                let me = app.state::<App>();
+                if me.making {
+                    let _ = std::fs::remove_file(me.folder.with_extension("open"));
+                }
+            }
+            let _ = (app, e);
+        });
+}

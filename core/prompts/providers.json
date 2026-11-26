@@ -1,0 +1,11 @@
+{
+  "anthropic":   { "name": "Anthropic",    "base_url": "https://api.anthropic.com/v1",     "key_env": "ANTHROPIC_API_KEY", "api": "anthropic", "kind": "claude", "key_url": "https://console.anthropic.com/settings/keys" },
+  "huggingface": { "name": "Hugging Face", "base_url": "https://router.huggingface.co/v1", "key_env": "HF_TOKEN",           "kind": "cloud", "key_url": "https://huggingface.co/settings/tokens" },
+  "openrouter":  { "name": "OpenRouter",   "base_url": "https://openrouter.ai/api/v1",     "key_env": "OPENROUTER_API_KEY", "kind": "cloud", "key_url": "https://openrouter.ai/keys" },
+  "together":    { "name": "Together",     "base_url": "https://api.together.xyz/v1",      "key_env": "TOGETHER_API_KEY",   "kind": "cloud", "key_url": "https://api.together.xyz/settings/api-keys" },
+  "groq":        { "name": "Groq",         "base_url": "https://api.groq.com/openai/v1",   "key_env": "GROQ_API_KEY",       "kind": "cloud", "key_url": "https://console.groq.com/keys" },
+  "fireworks":   { "name": "Fireworks",    "base_url": "https://api.fireworks.ai/inference/v1", "key_env": "FIREWORKS_API_KEY", "kind": "cloud", "key_url": "https://fireworks.ai/account/api-keys" },
+  "ollama":      { "name": "Ollama",       "base_url": "http://localhost:11434/v1",        "key_env": null, "kind": "local" },
+  "lmstudio":    { "name": "LM Studio",    "base_url": "http://localhost:1234/v1",         "key_env": null, "kind": "local" },
+  "vllm":        { "name": "vLLM",         "base_url": "http://localhost:8000/v1",         "key_env": null, "kind": "local" }
+}

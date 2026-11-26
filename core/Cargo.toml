@@ -1,0 +1,19 @@
+[package]
+name = "openas-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+readme = "../README.md"
+keywords.workspace = true
+description = "OpenAs: app folders, providers, building, checking and installing"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "3", features = ["json"] }
+dirs = "7"
+regex = "1"
+resvg = "0.50"
+plist = "1"
