@@ -45,20 +45,6 @@ don't `cargo clean` it); after moving it, run `./install.sh` again.
    last 20 versions are kept; go back to any of them. Going back changes the app's
    code, not what it has saved, and a change never rewrites your app's data.
 
-What an app costs, measured on real builds:
-
-| Model | Per app |
-|---|---|
-| Claude Opus 5.5 | about $2 |
-| Claude Sonnet 5.5 | about $1 (estimated) |
-| Claude Haiku 5.5 | about 5¢ (a screen recorder cost 6¢) |
-| Open models (DeepSeek, GLM) | experimental: 25¢ to 45¢, but they often run long and don't always finish |
-| A model on your Mac | free |
-
-These are rough: prices change, and the same app can take more or fewer steps.
-OpenAs shows what each app actually cost when it's done. A change costs about
-the same as a new app.
-
 Building stops at two limits you set under **Spending** (click the model name
 under the text box): $50 a month and $10 per app by default. They're there so a
 build that goes wrong can't keep spending. Models on your Mac have no limit.
