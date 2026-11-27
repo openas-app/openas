@@ -15,7 +15,22 @@ $runner = Join-Path $repo "target\Runner\Runner.exe"
 $out = Join-Path $repo "target\smoke"
 New-Item -ItemType Directory -Force $out | Out-Null
 
-function Check($cond, $what) { if (-not $cond) { throw "FAILED: $what" } else { Write-Output "ok: $what" } }
+function Check($cond, $what) { if (-not $cond) { throw "FAILED: $what" } else { Write-Host "ok: $what" } }
+
+function LoadCheck($folder, $name) {
+  $p = Start-Process $runner -ArgumentList "--check", $folder, "--report", "$out\$name.json" -PassThru -RedirectStandardError "$out\$name.err.txt" -RedirectStandardOutput "$out\$name.out.txt"
+  Check ($p.WaitForExit(60000)) "load check finished ($name)"
+  $r = Get-Content "$out\$name.json" -Raw
+  Write-Host $r
+  Get-Content "$out\$name.err.txt" -ErrorAction SilentlyContinue | Select-Object -Last 20 | ForEach-Object { Write-Host "  stderr: $_" }
+  return $r
+}
+
+# The load check on the hand-written app as it is, before anything is installed.
+$plain = "$T\plain"
+Copy-Item -Recurse "$repo\tools\smoke\hello" $plain
+$r = LoadCheck $plain "check-plain"
+Check ($r -match "example.com") "offline app's fetch was blocked (plain folder)"
 
 # A draft, as the builder leaves one.
 $d = "$T\root\apps\.draft-1"
@@ -36,12 +51,22 @@ Check ($info.cdhash.Length -eq 64) "seal recorded ($($info.cdhash))"
 Get-Content "$app\openas-app.json"
 & $oa list
 
-# The load check, with the real runtime.
-$p = Start-Process $runner -ArgumentList "--check", "$T\root\apps\hello", "--report", "$out\check.json" -PassThru
-Check ($p.WaitForExit(60000)) "load check finished"
-$report = Get-Content "$out\check.json" -Raw
-Write-Output $report
-Check ($report -match "example.com") "offline app's fetch was blocked"
+# keep opened the installed app; it should be running as itself.
+Start-Sleep 3
+$running = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq "$app\Hello.exe" }
+Write-Output "Hello.exe running: $(@($running).Count)"
+Get-Process msedgewebview2 -ErrorAction SilentlyContinue | Measure-Object | ForEach-Object { "web view processes: $($_.Count)" }
+
+# The load check on the installed app's folder, while the app is open.
+$r = LoadCheck "$T\root\apps\hello" "check-kept-open"
+if (-not ($r -match "example.com")) {
+  Write-Output "check failed with the app open; closing it and trying again"
+  $running | Stop-Process -Force
+  Start-Sleep 2
+  $r = LoadCheck "$T\root\apps\hello" "check-kept-closed"
+}
+Check ($r -match "example.com") "offline app's fetch was blocked (installed app's folder)"
+$running | Stop-Process -Force -ErrorAction SilentlyContinue
 
 # The builder's eyes: a click, a notification, the screenshot.
 Set-Content "$T\s.js" "await ui.click('#b'); await app.permissions.request(['notifications']); await app.notify('hi'); return document.getElementById('n').textContent;"
