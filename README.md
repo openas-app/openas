@@ -1,4 +1,4 @@
-# Open as
+# OpenAs
 
 [![CI](https://github.com/openas-app/openas/actions/workflows/ci.yml/badge.svg)](https://github.com/openas-app/openas/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
