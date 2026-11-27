@@ -8,7 +8,6 @@ main{min-height:100vh;display:flex;flex-direction:column;align-items:center;padd
 #home{padding-top:0}
 .hero{min-height:max(380px,calc(100vh - 300px));width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:52px}
 .topbar{position:fixed;top:0;left:0;right:0;height:52px;display:flex;align-items:center;padding-left:84px;z-index:4;background:var(--bg)}
-.wm{font:700 15px/20px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.02em}.wm i{font-style:normal;color:var(--signal)}.wm span{font-weight:500}
 h1{font:600 30px/1.07 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.035em;margin:0 0 8px;text-align:center}
 .lead{color:var(--mute);margin:0 0 24px;font-size:15px;line-height:22px;text-align:center}
 #home h1{font-weight:500;font-size:34px;letter-spacing:-.03em;margin:0 0 28px}
@@ -104,7 +103,7 @@ textarea::placeholder{color:var(--faint)}
 .foot2{display:flex;justify-content:space-between;margin-top:10px;color:var(--faint);font-size:12px}
 .back{color:var(--mute)}.back:hover{color:var(--fg)}.back:hover{color:var(--fg)}
 </style></head><body>
-<div class="topbar" data-tauri-drag-region><div class="wm" data-tauri-drag-region>OpenAs</div></div>
+<div class="topbar" data-tauri-drag-region></div>
 <main id="setup" hidden>
 <h1>Choose who builds your apps</h1>
 <p class="lead">OpenAs uses a model you bring. Your key stays in your Mac's Keychain.</p>
@@ -233,9 +232,9 @@ $("g").onclick = async () => {
 // ---- Who builds the apps ---------------------------------------------------
 let S = null, kind = "claude", provId = "anthropic", model = "", replacing = false;
 const CLAUDE = { "claude-opus-5-5": "Claude Opus 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5", "claude-haiku-5-5": "Claude Haiku 5.5" };
-// Suggested models per provider, with a few words each; "other" lets you type any id.
+// Suggested models per provider, with a warning where one is needed; "other" lets you type any id.
 const SUGGEST = {
-  anthropic: [["claude-opus-5-5", "Opus 5.5", "The best apps"], ["claude-sonnet-5-5", "Sonnet 5.5", "Nearly as good, half the price"], ["claude-haiku-5-5", "Haiku 5.5", "Quick and cheap, for small tools"]],
+  anthropic: [["claude-opus-5-5", "Opus 5.5", ""], ["claude-sonnet-5-5", "Sonnet 5.5", ""], ["claude-haiku-5-5", "Haiku 5.5", ""]],
   huggingface: [["deepseek-ai/DeepSeek-V4.1-Flash:cheapest", "DeepSeek V4.1 Flash", "Experimental: careful, but may not finish"], ["zai-org/GLM-5.3:cheapest", "GLM 5.3", "Experimental: can't look at screenshots while checking"]],
   openrouter: [["deepseek/deepseek-v4.1-flash", "DeepSeek V4.1 Flash", "Experimental: careful, but may not finish"], ["z-ai/glm-5.3", "GLM 5.3", "Experimental: can't look at screenshots while checking"]],
 };
@@ -279,7 +278,7 @@ function drawProvider() {
   const p = prov(provId), rows = SUGGEST[provId] || [];
   if (!rows.some(r => r[0] === model) && !(model && p.id === S.provider)) model = rows.length ? rows[0][0] : "";
   const other = !rows.some(r => r[0] === model);
-  let h = rows.map(([id, name, what]) => `<button class="opt${id === model ? " on" : ""}" role="radio" data-m="${id}"><span class="dot"></span><span><b>${name}</b><small>${what}</small></span></button>`).join("");
+  let h = rows.map(([id, name, what]) => `<button class="opt${id === model ? " on" : ""}" role="radio" data-m="${id}"><span class="dot"></span><span><b>${name}</b>${what ? `<small>${what}</small>` : ""}</span></button>`).join("");
   if (p.kind !== "claude") h += `<div class="opt${other ? " on" : ""}" role="radio" data-m=""><span class="dot"></span><span><b>${rows.length ? "Another model" : "Model"}</b><small>${p.kind === "local" ? "The model's name, as " + p.name + " lists it" : "Any model id " + p.name + " offers"}</small>${other ? `<input id="mdl" spellcheck="false" placeholder="${p.kind === "local" ? "e.g. qwen3-coder" : "Model id"}" value="${other ? esc(model) : ""}">` : ""}</span></div>`;
   $("opts").innerHTML = h;
   $("opts").querySelectorAll(".opt").forEach(o => o.onclick = e => {
