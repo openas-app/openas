@@ -1,9 +1,8 @@
 //! The Helper answers only callers it can name. These start a real Helper on
 //! a temporary root and call it from programs it must refuse.
-#![cfg(target_os = "macos")]
 
+use openas_platform::ipc;
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -30,9 +29,8 @@ fn start(tag: &str) -> Helper {
         .env("OPENAS_ROOT", &root)
         .spawn()
         .unwrap();
-    let sock = root.join("helper.sock");
     let t = Instant::now();
-    while UnixStream::connect(&sock).is_err() {
+    while ipc::connect(&root).is_err() {
         assert!(
             t.elapsed() < Duration::from_secs(10),
             "the Helper never started"
@@ -43,9 +41,8 @@ fn start(tag: &str) -> Helper {
 }
 
 /// Sends one request and returns the final line (`ok` or `error`).
-fn ask(sock: &Path, req: &str) -> String {
-    let mut s = UnixStream::connect(sock).unwrap();
-    s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+fn ask(root: &Path, req: &str) -> String {
+    let mut s = ipc::connect(root).unwrap();
     writeln!(s, "{req}").unwrap();
     let mut last = String::new();
     for line in BufReader::new(&s).lines() {
@@ -62,7 +59,7 @@ fn ask(sock: &Path, req: &str) -> String {
 fn a_stranger_is_refused() {
     // This test binary is not OpenAs, its window, or an app it installed.
     let h = start("stranger");
-    let reply = ask(&h.root.join("helper.sock"), r#"{"op":"settings"}"#);
+    let reply = ask(&h.root, r#"{"op":"settings"}"#);
     assert!(reply.contains("\"error\""), "{reply}");
     assert!(reply.contains("not an OpenAs app"), "{reply}");
 }
@@ -72,8 +69,11 @@ fn a_modified_copy_of_an_app_is_refused() {
     // An app OpenAs recorded, but the program at that path is not the copy
     // it installed (its code hash differs).
     let h = start("modified");
-    let bundle = h.root.join("Plants.app");
+    let bundle = openas_platform::install_path(&h.root, "Plants");
+    #[cfg(target_os = "macos")]
     let exe = bundle.join("Contents/MacOS/Plants");
+    #[cfg(windows)]
+    let exe = openas_platform::exe_in(&bundle);
     std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
     std::fs::copy(std::env::current_exe().unwrap(), &exe).unwrap();
     let app = h.root.join("apps/plants");
@@ -88,7 +88,7 @@ fn a_modified_copy_of_an_app_is_refused() {
     // The copy runs only `as_a_client` below, which calls the Helper.
     let out = Command::new(&exe)
         .args(["--ignored", "--exact", "as_a_client", "--nocapture"])
-        .env("OA_TEST_SOCK", h.root.join("helper.sock"))
+        .env("OA_TEST_ROOT", &h.root)
         .output()
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
@@ -103,9 +103,9 @@ fn a_modified_copy_of_an_app_is_refused() {
 #[test]
 #[ignore]
 fn as_a_client() {
-    let sock = std::env::var("OA_TEST_SOCK").expect("only run from the other test");
+    let root = std::env::var("OA_TEST_ROOT").expect("only run from the other test");
     println!(
         "REPLY {}",
-        ask(Path::new(&sock), r#"{"op":"undo","app":"plants"}"#)
+        ask(Path::new(&root), r#"{"op":"undo","app":"plants"}"#)
     );
 }

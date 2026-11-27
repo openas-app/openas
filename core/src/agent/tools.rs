@@ -345,6 +345,31 @@ pub(super) fn run_tool(
     }
 }
 
+/// A copy of a PNG no larger than `max` pixels on its longer side.
+fn shrink_png(from: &Path, to: &Path, max: u32) -> Result<()> {
+    use resvg::tiny_skia::{FilterQuality, Pixmap, PixmapPaint, Transform};
+    let src = Pixmap::load_png(from)?;
+    let scale = (max as f32 / src.width().max(src.height()) as f32).min(1.0);
+    let (w, h) = (
+        ((src.width() as f32 * scale).round() as u32).max(1),
+        ((src.height() as f32 * scale).round() as u32).max(1),
+    );
+    let mut out = Pixmap::new(w, h).ok_or_else(|| anyhow::anyhow!("pixmap"))?;
+    out.draw_pixmap(
+        0,
+        0,
+        src.as_ref(),
+        &PixmapPaint {
+            quality: FilterQuality::Bicubic,
+            ..Default::default()
+        },
+        Transform::from_scale(scale, scale),
+        None,
+    );
+    out.save_png(to)?;
+    Ok(())
+}
+
 pub(super) fn snap_exe() -> PathBuf {
     std::env::var("OPENAS_SNAP")
         .map(PathBuf::from)
@@ -448,14 +473,7 @@ pub(super) fn check_tool(
     let mut text = text.to_string();
     let mut content = vec![];
     if shot.exists() {
-        let _ = Command::new("/usr/bin/sips")
-            .args(["-Z", "1400"])
-            .arg(&shot)
-            .arg("--out")
-            .arg(&small)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+        let _ = shrink_png(&shot, &small, 1400);
         if let Ok(png) = std::fs::read(&small) {
             content.push(json!({ "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": b64(&png) } }));
             // Keep the latest look for the person watching.

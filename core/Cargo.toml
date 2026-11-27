@@ -19,6 +19,8 @@ dirs = "7"
 regex = "1"
 resvg = "0.50"
 plist = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+openas-platform = { path = "../platform" }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }

@@ -69,8 +69,43 @@ use serve::*;
 use talk::*;
 pub(crate) use who::{Draft, Who};
 
+/// `.openas` files named on a command line (how Windows opens a shared app
+/// with OpenAs).
+#[cfg_attr(not(windows), allow(dead_code))]
+fn shared_files(args: &[String]) -> Vec<String> {
+    args.iter()
+        .skip(1)
+        .filter(|a| a.to_lowercase().ends_with(".openas") && std::path::Path::new(a).is_file())
+        .cloned()
+        .collect()
+}
+
+/// Shared files arrived: the home window shows them.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn take_shared(app: &tauri::AppHandle, files: Vec<String>) {
+    if files.is_empty() || !app.state::<App>().manager {
+        return;
+    }
+    app.state::<Inbox>()
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .extend(files);
+    if let Some(w) = app.get_webview("main") {
+        let _ = w.eval("window.__shared && window.__shared()");
+    }
+    if let Some(w) = app.get_window("main") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
 fn main() {
     let me = which_app();
+    // Windows: the process is this app on the taskbar (its shortcut's id).
+    if let Some(id) = &me.id {
+        openas_platform::adopt_identity(id);
+    }
     let checking = me.check.clone();
     let manager = me.manager;
     let store = load_store(&me.folder, checking.is_none());
@@ -91,7 +126,23 @@ fn main() {
     let me_proto = me.clone();
     let me_web = me.clone();
 
-    tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default();
+    // Windows: one window per app, as on a Mac. Opening it again brings the
+    // window forward (and hands OpenAs a shared file opened with it). Only
+    // installed copies: checks and drafts run side by side.
+    #[cfg(windows)]
+    if me.id.is_some() && checking.is_none() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if let Some(w) = app.get_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+            take_shared(app, shared_files(&argv));
+        }));
+    }
+    builder
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -139,7 +190,7 @@ fn main() {
                     match out {
                         Ok(o) if o.status.success() => {
                             let file = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                            let _ = std::process::Command::new("/usr/bin/open").arg("-R").arg(file).status();
+                            openas_platform::reveal(std::path::Path::new(&file));
                         }
                         other => eprintln!("share failed: {other:?}"),
                     }
@@ -499,19 +550,18 @@ fn main() {
             // A shared app file opened with OpenAs: the home window shows it.
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = &e {
-                if app.state::<App>().manager {
-                    let files: Vec<String> = urls.iter().filter_map(|u| u.to_file_path().ok()).filter(|p| p.extension().is_some_and(|x| x == "openas")).map(|p| p.to_string_lossy().into_owned()).collect();
-                    if !files.is_empty() {
-                        app.state::<Inbox>().0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).extend(files);
-                        if let Some(w) = app.get_webview("main") {
-                            let _ = w.eval("window.__shared && window.__shared()");
-                        }
-                        if let Some(w) = app.get_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
+                let files: Vec<String> = urls.iter().filter_map(|u| u.to_file_path().ok()).filter(|p| p.extension().is_some_and(|x| x == "openas")).map(|p| p.to_string_lossy().into_owned()).collect();
+                take_shared(app, files);
+            }
+            #[cfg(windows)]
+            if let tauri::RunEvent::Ready = e {
+                // The app's own icon on its window and taskbar button.
+                if let Some(w) = app.get_window("main") {
+                    if let Ok(img) = tauri::image::Image::from_path(app.state::<App>().folder.join("icon.png")) {
+                        let _ = w.set_icon(img);
                     }
                 }
+                take_shared(app, shared_files(&std::env::args().collect::<Vec<_>>()));
             }
             // The making window is gone: the build saves the app by itself.
             if let tauri::RunEvent::Exit = e {

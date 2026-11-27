@@ -34,10 +34,7 @@ fn setup() -> Result<()> {
     )?;
     eprintln!("Installed {}", app.display());
     // In the background, so it never takes over the screen.
-    std::process::Command::new("open")
-        .arg("-g")
-        .arg(&app)
-        .status()?;
+    openas_platform::launch(&app, true)?;
     Ok(())
 }
 
@@ -61,10 +58,7 @@ summary: {}", info.name, f.summary);
             if let Some(p) = &info.installed {
                 // A test run never brings a window in front of the person.
                 let quiet = std::env::var("OPENAS_QUIET_WINDOW").is_ok();
-                std::process::Command::new("open")
-                    .args(if quiet { &["-g"][..] } else { &[][..] })
-                    .arg(p)
-                    .status()?;
+                openas_platform::launch(p, quiet)?;
             }
         }
         // A change, kept straight away (in the app's column it waits for Save).

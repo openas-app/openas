@@ -2,7 +2,6 @@
 //! bundle id, executable name and icon. Nothing is compiled per app.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{anyhow, bail, Context, Result};
 
@@ -15,20 +14,6 @@ use crate::paths;
 pub fn bundle_id(app_id: &str) -> String {
     let prefix = std::env::var("OPENAS_ID_PREFIX").unwrap_or_else(|_| "app.openas.".into());
     format!("{prefix}{app_id}")
-}
-
-fn run(cmd: &mut Command) -> Result<()> {
-    let out = cmd
-        .output()
-        .with_context(|| format!("running {:?}", cmd.get_program()))?;
-    if !out.status.success() {
-        bail!(
-            "{:?} failed: {}",
-            cmd.get_program(),
-            String::from_utf8_lossy(&out.stderr).trim()
-        );
-    }
-    Ok(())
 }
 
 /// The icon as macOS draws app icons: the artwork inside the system's rounded
@@ -126,27 +111,6 @@ pub fn shaped(svg: &str, px: u32) -> Result<resvg::tiny_skia::Pixmap> {
     Ok(out)
 }
 
-/// Renders the icon at every size macOS wants, then packs it.
-fn make_icns(svg: &str, out: &Path) -> Result<()> {
-    let set = out.with_extension("iconset");
-    let _ = std::fs::remove_dir_all(&set);
-    std::fs::create_dir_all(&set)?;
-    for s in [16u32, 32, 128, 256, 512] {
-        for (scale, suffix) in [(1, ""), (2, "@2x")] {
-            // Each size drawn from the artwork itself, so small ones stay sharp.
-            shaped(svg, s * scale)?.save_png(set.join(format!("icon_{s}x{s}{suffix}.png")))?;
-        }
-    }
-    run(Command::new("iconutil")
-        .arg("-c")
-        .arg("icns")
-        .arg(&set)
-        .arg("-o")
-        .arg(out))?;
-    let _ = std::fs::remove_dir_all(&set);
-    Ok(())
-}
-
 /// A plain icon when the model gave none or one that won't draw.
 pub fn fallback_icon(seed: &str) -> String {
     let h = seed
@@ -163,18 +127,11 @@ pub fn render_png(svg: &str, out: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Installs (or reinstalls) the app at `folder` as `<install_dir>/<name>.app`.
-/// The code-directory hash of an installed bundle: what the Helper checks a
-/// caller against, so only the exact copy it installed is trusted.
+/// A fingerprint of an installed copy (code-directory hash on a Mac, a hash
+/// of the folder on Windows): what the Helper checks a caller against, so
+/// only the exact copy it installed is trusted.
 pub fn cdhash(app: &Path) -> Option<String> {
-    let out = Command::new("codesign")
-        .arg("-dvvv")
-        .arg(app)
-        .output()
-        .ok()?;
-    String::from_utf8_lossy(&out.stderr)
-        .lines()
-        .find_map(|l| l.strip_prefix("CDHash=").map(str::to_string))
+    openas_platform::seal(app)
 }
 
 /// The name an app's bundle gets: no path characters, no invisible or control
@@ -208,24 +165,28 @@ pub fn clean_name(name: &str) -> String {
         .collect();
     let n = n.trim().trim_start_matches('.').trim();
     if n.is_empty() {
+        return "New App".into();
+    }
+    if openas_platform::allowed_name(n) {
+        return n.into();
+    }
+    // Windows refuses more: <>"|?* in names, a trailing dot, CON and friends.
+    let n: String = n.chars().filter(|c| !"<>\"|?*".contains(*c)).collect();
+    let n = n.trim_end_matches(['.', ' ']).trim();
+    if n.is_empty() {
         "New App".into()
-    } else {
+    } else if openas_platform::allowed_name(n) {
         n.into()
+    } else {
+        format!("{n} App")
     }
 }
 
-/// Whether an installed bundle belongs to the app kept in `folder`.
+/// Whether an installed copy belongs to the app kept in `folder`.
 pub fn owned_by(app: &Path, folder: &Path) -> bool {
     let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
-    plist::Value::from_file(app.join("Contents/Info.plist"))
-        .ok()
-        .and_then(|v| {
-            v.as_dictionary()
-                .and_then(|d| d.get("OAAppFolder"))
-                .and_then(|f| f.as_string())
-                .map(PathBuf::from)
-        })
-        .is_some_and(|owner| owner == folder || canon(&owner) == canon(folder))
+    openas_platform::read_identity(app)
+        .is_some_and(|who| who.folder == folder || canon(&who.folder) == canon(folder))
 }
 
 pub fn install(folder: &Path, app_id: &str, name: &str, svg: &str) -> Result<PathBuf> {
@@ -244,133 +205,44 @@ pub fn install_as(
     let runner = paths::runner_bundle();
     if !runner.exists() {
         bail!(
-            "no Runner at {} (build it with runner/scripts/bundle_mac.sh)",
+            "no Runner at {} (build it first: see the README)",
             runner.display()
         );
     }
     let dest_dir = paths::install_dir();
     std::fs::create_dir_all(&dest_dir)?;
     let safe_name = clean_name(name);
-    let app = dest_dir.join(format!("{safe_name}.app"));
-    if app.exists() {
-        // Only ever replace this app's own bundle, never another app of that name.
-        if !owned_by(&app, folder) {
-            bail!(
-                "An app called \u{201c}{safe_name}\u{201d} is already in your Applications folder"
-            );
-        }
-        std::fs::remove_dir_all(&app)?;
+    let app = openas_platform::install_path(&dest_dir, &safe_name);
+    // Only ever replace this app's own copy, never another app of that name.
+    if app.exists() && !owned_by(&app, folder) {
+        bail!("An app called \u{201c}{safe_name}\u{201d} is already installed");
     }
-    run(Command::new("cp").arg("-R").arg(&runner).arg(&app))?;
-
-    let info = app.join("Contents/Info.plist");
-    let mut dict = plist::Value::from_file(&info)?
-        .into_dictionary()
-        .ok_or_else(|| anyhow!("Runner Info.plist"))?;
-    let s = |v: &str| plist::Value::String(v.to_string());
-    dict.insert("CFBundleName".into(), s(&safe_name));
-    dict.insert("CFBundleDisplayName".into(), s(&safe_name));
-    // What macOS shows when the app first asks for the camera or microphone
-    // (a browser can use both after asking, so every app can).
-    dict.insert(
-        "NSCameraUsageDescription".into(),
-        s(&format!(
-            "{safe_name} uses the camera only when you ask it to."
-        )),
-    );
-    dict.insert(
-        "NSMicrophoneUsageDescription".into(),
-        s(&format!(
-            "{safe_name} uses the microphone only when you ask it to."
-        )),
-    );
-    dict.insert("CFBundleIdentifier".into(), s(&bundle_id(app_id)));
-    dict.insert("CFBundleExecutable".into(), s(&safe_name));
-    dict.insert("OAAppFolder".into(), s(&folder.to_string_lossy()));
-    // Apps opened from Finder get no environment, so a non-default setup
-    // (a test root) travels in the bundle and on to the Helper it starts.
-    for (key, var) in [
-        ("OARoot", "OPENAS_ROOT"),
-        ("OAInstallDir", "OPENAS_INSTALL_DIR"),
-        ("OAIdPrefix", "OPENAS_ID_PREFIX"),
-    ] {
-        if let Ok(v) = std::env::var(var) {
-            dict.insert(key.into(), s(&v));
-        }
-    }
-    // Where to find the Helper when the app's menu needs it.
-    if let Ok(exe) = std::env::current_exe() {
-        dict.insert(
-            "OAHelper".into(),
-            s(&paths::helper_exe(&exe).to_string_lossy()),
-        );
-    }
-    if manager {
-        dict.insert("OAManager".into(), plist::Value::Boolean(true));
-        // OpenAs opens shared apps (.openas files).
-        let mut ty = plist::Dictionary::new();
-        ty.insert("UTTypeIdentifier".into(), s("app.openas.shared"));
-        ty.insert("UTTypeDescription".into(), s("OpenAs shared app"));
-        ty.insert(
-            "UTTypeConformsTo".into(),
-            plist::Value::Array(vec![s("public.data"), s("public.archive")]),
-        );
-        let mut tags = plist::Dictionary::new();
-        tags.insert(
-            "public.filename-extension".into(),
-            plist::Value::Array(vec![s("openas")]),
-        );
-        ty.insert(
-            "UTTypeTagSpecification".into(),
-            plist::Value::Dictionary(tags),
-        );
-        dict.insert(
-            "UTExportedTypeDeclarations".into(),
-            plist::Value::Array(vec![plist::Value::Dictionary(ty)]),
-        );
-        let mut doc = plist::Dictionary::new();
-        doc.insert("CFBundleTypeName".into(), s("OpenAs shared app"));
-        doc.insert("CFBundleTypeRole".into(), s("Viewer"));
-        doc.insert("LSHandlerRank".into(), s("Owner"));
-        doc.insert(
-            "LSItemContentTypes".into(),
-            plist::Value::Array(vec![s("app.openas.shared")]),
-        );
-        dict.insert(
-            "CFBundleDocumentTypes".into(),
-            plist::Value::Array(vec![plist::Value::Dictionary(doc)]),
-        );
-    }
-    plist::Value::Dictionary(dict).to_file_xml(&info)?;
-    // The process carries the app's own name (Activity Monitor, Force Quit).
-    let macos = app.join("Contents/MacOS");
-    std::fs::rename(macos.join("Runner"), macos.join(&safe_name))?;
-
-    let svg = if make_icns(svg, &app.join("Contents/Resources/AppIcon.icns")).is_ok() {
+    // The model's icon, or a plain one when it won't draw.
+    let svg = if shaped(svg, 64).is_ok() {
         svg.to_string()
     } else {
-        let f = fallback_icon(app_id);
-        make_icns(&f, &app.join("Contents/Resources/AppIcon.icns"))?;
-        f
+        fallback_icon(app_id)
     };
+    let who = openas_platform::Identity {
+        folder: folder.to_path_buf(),
+        name: safe_name.clone(),
+        id: bundle_id(app_id),
+        // Where to find the Helper when the app's menu needs it.
+        helper: std::env::current_exe()
+            .ok()
+            .map(|exe| paths::helper_exe(&exe)),
+        manager,
+        // Apps opened from the Finder or Start menu get no environment, so a
+        // non-default setup (a test root) travels in the copy and on to the
+        // Helper it starts.
+        env: openas_platform::CARRIED_ENV
+            .iter()
+            .filter_map(|var| Some((var.to_string(), std::env::var(var).ok()?)))
+            .collect(),
+    };
+    let icon = |px: u32| -> Result<Vec<u8>> { Ok(shaped(&svg, px)?.encode_png()?) };
+    openas_platform::make_copy(&runner, &app, &who, &icon)?;
     let _ = render_png(&svg, &folder.join("icon.png"));
-
-    // A copy of a downloaded Runner inherits its quarantine flag; this copy was
-    // made here by the user's own action, so it is not a download.
-    let _ = Command::new("xattr")
-        .arg("-dr")
-        .arg("com.apple.quarantine")
-        .arg(&app)
-        .output();
-    run(Command::new("codesign")
-        .arg("--force")
-        .arg("--sign")
-        .arg("-")
-        .arg(&app))?;
-    let _ = Command::new("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
-        .arg("-f")
-        .arg(&app)
-        .output();
     Ok(app)
 }
 
@@ -387,9 +259,15 @@ mod tests {
         assert_eq!(clean_name("/:"), "New App");
         assert_eq!(clean_name(&"x".repeat(80)).len(), 60);
         assert_eq!(clean_name("Tea Timer"), "Tea Timer");
+        if cfg!(windows) {
+            assert_eq!(clean_name("What?"), "What");
+            assert_eq!(clean_name("CON"), "CON App");
+            assert_eq!(clean_name("Notes."), "Notes");
+        }
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn only_an_apps_own_bundle_is_its_own() {
         let tmp = std::env::temp_dir().join(format!("oa-owned-{}", std::process::id()));
         let app = tmp.join("X.app/Contents");

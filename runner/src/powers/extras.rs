@@ -208,19 +208,11 @@ pub fn run_program(
     use std::io::{Read, Write};
     use std::process::{Command, Stdio};
     const CAP: usize = 8 << 20;
-    // Apps opened from the Finder get a bare PATH; give them the usual one.
+    // Its own group (and on a Mac the usual PATH, which apps opened from the
+    // Finder lack), so a time limit stops everything it started.
     let mut cmd = Command::new(program);
     cmd.args(args).current_dir(cwd);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        cmd.env(
-            "PATH",
-            "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-        )
-        // Its own process group, so a time limit stops everything it started.
-        .process_group(0);
-    }
+    openas_platform::proc::grouped(&mut cmd);
     let mut child = cmd
         .stdin(if stdin.is_some() {
             Stdio::piped()
@@ -231,6 +223,7 @@ pub fn run_program(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("couldn't run “{program}”: {e}"))?;
+    let group = openas_platform::proc::Group::of(&child);
     if let (Some(text), Some(mut w)) = (stdin, child.stdin.take()) {
         std::thread::spawn(move || {
             let _ = w.write_all(text.as_bytes());
@@ -273,13 +266,7 @@ pub fn run_program(
             break Some(st);
         }
         if start.elapsed().as_millis() as u64 > timeout_ms {
-            // SAFETY: kill(2) takes no pointers. The child was started as
-            // the leader of its own group (pgid = pid), so the negative pid
-            // reaches it and everything it started, and nothing else.
-            #[cfg(unix)]
-            unsafe {
-                libc::kill(-(child.id() as i32), libc::SIGKILL)
-            };
+            group.kill();
             let _ = child.kill();
             timed_out = true;
             break child.wait().ok();

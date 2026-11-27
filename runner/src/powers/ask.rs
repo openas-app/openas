@@ -312,7 +312,10 @@ pub(crate) fn ask_folder(
 /// holding OpenAs' own data or the installed apps (an app could rewrite
 /// its own grants there).
 pub fn too_wide(p: &Path, app_folder: &Path) -> bool {
-    let canon = |q: &Path| q.canonicalize().unwrap_or_else(|_| q.to_path_buf());
+    let canon = |q: &Path| openas_platform::canonical(q);
+    // Windows: compare resolved paths throughout (a Mac keeps the path given).
+    #[cfg(windows)]
+    let p = &canon(p);
     let home = canon(&dirs::home_dir().unwrap_or_default());
     let data_root = canon(
         app_folder
@@ -321,13 +324,7 @@ pub fn too_wide(p: &Path, app_folder: &Path) -> bool {
             .unwrap_or(app_folder),
     );
     let exe = std::env::current_exe().ok().map(|e| canon(&e));
-    let bundle = exe
-        .as_deref()
-        .and_then(|e| {
-            e.ancestors()
-                .find(|a| a.extension().is_some_and(|x| x == "app"))
-        })
-        .map(Path::to_path_buf);
+    let bundle = exe.as_deref().and_then(openas_platform::bundle_of);
     // iCloud Drive and cloud-storage folders live in Library: a folder inside
     // one of them is fine; the drive itself is too much.
     let clouds = [
@@ -340,16 +337,12 @@ pub fn too_wide(p: &Path, app_folder: &Path) -> bool {
         })
     });
     home.starts_with(p)
+        // A disk itself (D:\ on Windows, / on a Mac).
+        || p.parent().is_none()
         || (p.starts_with(home.join("Library")) && !in_cloud)
-        || p.starts_with("/System")
-        || p.starts_with("/Library")
-        || p.starts_with("/private")
-        || p.starts_with("/usr")
-        || p.starts_with("/bin")
-        || p.starts_with("/sbin")
-        || p.starts_with("/etc")
-        || p.starts_with("/Applications")
-        || p.starts_with(home.join("Applications"))
+        || openas_platform::closed_folders(&home)
+            .iter()
+            .any(|c| p.starts_with(canon(c)))
         // Where this app and its siblings are installed (a setup may use
         // another folder than ~/Applications).
         || bundle
