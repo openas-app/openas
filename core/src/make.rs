@@ -207,6 +207,8 @@ pub fn install_draft(dir: &Path, name: &str) -> Result<AppInfo> {
     let name = &free_name(name, &folder);
     std::fs::rename(dir, &folder)?;
     let _ = std::fs::remove_file(folder.join("draft.json"));
+    // Tried online in OpenAs; the installed app asks the person itself.
+    let _ = std::fs::remove_file(folder.join(".preview-internet"));
     let svg = std::fs::read_to_string(folder.join("icon.svg"))
         .unwrap_or_else(|_| install::fallback_icon(&id));
     let s = |k: &str| {
@@ -683,6 +685,92 @@ pub fn format_spec() -> &'static str {
     FORMAT
 }
 
+// ---- The internet switch (read by the Runner, `runner/src/powers/net.rs`) ----
+
+/// The version an answer belongs to, worked out exactly as the Runner does:
+/// a change being tried is its own version (when `.pending` was made), else
+/// the saved version's time, else "first".
+pub fn version_key(folder: &Path) -> String {
+    let pending = folder.join(".pending");
+    if pending.join("app/index.html").exists() {
+        let made = std::fs::metadata(&pending)
+            .and_then(|m| m.created().or_else(|_| m.modified()))
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_nanos());
+        return format!("pending-{made}");
+    }
+    saved_key(folder)
+}
+
+fn saved_key(folder: &Path) -> String {
+    std::fs::read_to_string(folder.join("version.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|v| v.get("t").map(|t| t.to_string()))
+        .unwrap_or_else(|| "first".into())
+}
+
+fn read_net(folder: &Path) -> Option<Value> {
+    std::fs::read_to_string(folder.join("permissions.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+}
+
+/// Before saving a change: the person's answer while trying it (kept in
+/// `.pending/permissions.json`), if they gave one. It is about this same
+/// code, so `net_follow_save` makes it the saved version's.
+pub(crate) fn net_tried(folder: &Path) -> Option<bool> {
+    read_net(&folder.join(".pending")).and_then(|v| v["network"].as_bool())
+}
+
+pub(crate) fn net_follow_save(folder: &Path, tried: Option<bool>) -> Result<()> {
+    if let Some(on) = tried {
+        std::fs::write(
+            folder.join("permissions.json"),
+            serde_json::json!({ "network": on, "version": saved_key(folder) }).to_string(),
+        )?;
+    }
+    Ok(())
+}
+
+/// Apps used the internet freely before it became a permission. Once per
+/// setup, those that weren't switched off keep it, for the version they run
+/// now; every app made after starts offline. Old Runner copies read the same
+/// `network: true`, so nothing changes for them either.
+pub fn migrate_internet() -> Result<()> {
+    let done = paths::root().join(".internet-asks");
+    if done.exists() {
+        return Ok(());
+    }
+    // A new setup has nothing to carry over, and nothing made later ever is.
+    for e in std::fs::read_dir(paths::apps())
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
+        let folder = e.path();
+        let name = e.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') || !folder.join("app.json").exists() {
+            continue;
+        }
+        let v = read_net(&folder);
+        let legacy = v.as_ref().is_none_or(|v| v.get("version").is_none());
+        let on = v
+            .as_ref()
+            .is_none_or(|v| v["network"] != Value::Bool(false));
+        if legacy && on {
+            std::fs::write(
+                folder.join("permissions.json"),
+                serde_json::json!({ "network": true, "version": saved_key(&folder) }).to_string(),
+            )?;
+        }
+    }
+    std::fs::create_dir_all(paths::root())?;
+    std::fs::write(done, "")?;
+    Ok(())
+}
+
 /// Copies the current Runner into an app again (after the Runner improves),
 /// keeping its name, icon and folder; records the new code hash.
 pub fn reinstall(app: &str) -> Result<AppInfo> {
@@ -704,6 +792,12 @@ mod tests {
     fn versions_are_named_capped_and_reversible() {
         let root = std::env::temp_dir().join(format!("oa-versions-{}", std::process::id()));
         std::env::set_var("OPENAS_ROOT", &root);
+        // A brand-new setup has nothing to carry over and says so at once,
+        // so an app made before the next command is never stamped online.
+        let _ = std::fs::remove_dir_all(&root);
+        migrate_internet().unwrap();
+        assert!(root.join(".internet-asks").exists());
+        std::fs::remove_file(root.join(".internet-asks")).unwrap();
         let folder = paths::apps().join("notes");
         std::fs::create_dir_all(folder.join("app")).unwrap();
         let info = AppInfo {
@@ -764,8 +858,69 @@ mod tests {
                 want
             );
         }
+        // The internet, once it became a permission: an app from before keeps
+        // it for the version it runs; one switched off stays off; later apps
+        // aren't touched (this runs once).
+        let quiet = paths::apps().join("quiet");
+        std::fs::create_dir_all(&quiet).unwrap();
+        write_info(
+            &quiet,
+            &AppInfo {
+                id: "quiet".into(),
+                ..info.clone()
+            },
+        )
+        .unwrap();
+        std::fs::write(quiet.join("permissions.json"), r#"{"network":false}"#).unwrap();
+        migrate_internet().unwrap();
+        let net = |f: &Path| read_net(f).unwrap_or(Value::Null);
+        assert_eq!(net(&folder)["network"], true);
+        assert_eq!(
+            net(&folder)["version"].as_str(),
+            Some(saved_key(&folder).as_str())
+        );
+        assert_eq!(net(&quiet)["network"], false);
+        let later = paths::apps().join("later");
+        std::fs::create_dir_all(&later).unwrap();
+        write_info(
+            &later,
+            &AppInfo {
+                id: "later".into(),
+                ..info.clone()
+            },
+        )
+        .unwrap();
+        migrate_internet().unwrap();
+        assert!(read_net(&later).is_none());
         std::env::remove_var("OPENAS_ROOT");
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_yes_given_to_a_tried_change_goes_with_it_when_saved() {
+        let f = std::env::temp_dir().join(format!("oa-net-save-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&f);
+        std::fs::create_dir_all(f.join(".pending/app")).unwrap();
+        std::fs::write(f.join(".pending/app/index.html"), "x").unwrap();
+        std::fs::write(f.join("version.json"), r#"{"t":1}"#).unwrap();
+        // Allowed for the saved version only: the change asks again later.
+        std::fs::write(
+            f.join("permissions.json"),
+            r#"{"network":true,"version":"1"}"#,
+        )
+        .unwrap();
+        assert_eq!(net_tried(&f), None);
+        assert!(version_key(&f).starts_with("pending-"));
+        // Allowed while trying it (the Runner writes it beside the change).
+        std::fs::write(f.join(".pending/permissions.json"), r#"{"network":true}"#).unwrap();
+        let tried = net_tried(&f);
+        assert_eq!(tried, Some(true));
+        std::fs::remove_dir_all(f.join(".pending")).unwrap();
+        std::fs::write(f.join("version.json"), r#"{"t":2}"#).unwrap();
+        net_follow_save(&f, tried).unwrap();
+        assert_eq!(read_net(&f).unwrap()["version"], "2");
+        assert_eq!(read_net(&f).unwrap()["network"], true);
+        let _ = std::fs::remove_dir_all(f);
     }
 
     #[test]

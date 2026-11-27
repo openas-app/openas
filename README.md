@@ -53,19 +53,21 @@ build that goes wrong can't keep spending. Models on your Mac have no limit.
 
 There are three levels (details and limits in [SECURITY.md](SECURITY.md)):
 
-- **Default: what a web page can do.** The internet over https, the camera,
-  microphone and screen (macOS asks you first), files you pick or drop in. An app's
-  files load from its own folder and scripts from other sites are blocked, but like
-  any web page online it can still download code and run it. For an app you don't
-  trust, turn off **Allow Internet Access** in its menu.
-- **App permissions, asked when the app needs them:** notifications, a menu bar item,
-  staying on top, global keyboard shortcuts, and one folder you choose.
+- **Default: an offline web page.** The camera, microphone and screen (macOS asks
+  you first) and files you pick or drop in. An app's files load only from its own
+  folder, and it has no internet.
+- **App permissions, asked when the app needs them:** the internet, notifications,
+  a menu bar item, staying on top, global keyboard shortcuts, and one folder you
+  choose. An app that shows live data (weather, prices) asks for the internet when
+  it opens; **Allow Internet Access** in its menu turns it on or off at any time.
 - **Full access to your Mac:** running programs and reading or changing any file,
   which includes reading your provider key from the Keychain. Asked in its own
   warning, and only when an app really needs it.
 
 Permissions belong to a version of the app: after any change, it asks again, also
-while you try a change before saving it.
+while you try a change before saving it (a yes given while trying it carries over
+when you save that change). Apps made before the internet became a permission keep
+it until they change.
 
 **What your model sees.** Your description, the app's code, and, when you change
 an app, screenshots and test results of it running with its saved data. All of it

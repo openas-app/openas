@@ -64,6 +64,7 @@ mod who;
 use api::*;
 use app::*;
 use helper::*;
+use powers::{online, set_net};
 use serve::*;
 use talk::*;
 pub(crate) use who::{Draft, Who};
@@ -85,11 +86,10 @@ fn main() {
         context.config_mut().identifier = id.clone();
     }
     let downloads = dirs::download_dir().unwrap_or_else(std::env::temp_dir);
-    // Read once per page load (the menu toggle reloads the window).
-    let net = Arc::new(std::sync::atomic::AtomicBool::new(network_allowed(
-        &me.folder,
-    )));
-    let net_proto = net.clone();
+    // Asked per file: the code that runs (saved, or a change being tried)
+    // decides, and a change of answer reloads the page.
+    let me_proto = me.clone();
+    let me_web = me.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -102,12 +102,12 @@ fn main() {
             if ctx.webview_label() == "app" {
                 if let Some(who) = ctx.app_handle().try_state::<Who>().filter(|w| w.home.manager) {
                     return match who.shown() {
-                        Some(Draft { app: d, .. }) => serve_dir(&d.folder.join("app"), rel, &policy(network_allowed(&d.folder))),
+                        Some(Draft { app: d, .. }) => serve_dir(&d.folder.join("app"), rel, &policy(online(&d))),
                         None => not_found(),
                     };
                 }
             }
-            let csp = policy(net_proto.load(Ordering::SeqCst));
+            let csp = policy(online(&me_proto));
             let ok = respond;
             // OpenAs' own pages: never any internet (the build preview
             // inside the manager inherits this).
@@ -146,15 +146,12 @@ fn main() {
                 });
             }
             "internet" => {
-                // Only the person, from the app's own menu, changes this.
-                let t = app.state::<NetToggle>();
-                let on = !t.flag.load(Ordering::SeqCst);
-                t.flag.store(on, Ordering::SeqCst);
-                let _ = t.item.set_checked(on);
-                let _ = std::fs::write(t.folder.join("permissions.json"), json!({ "network": on }).to_string());
-                if let Some(w) = app.get_webview("app").or_else(|| app.get_webview("main")) {
-                    let _ = w.eval("location.reload()");
-                }
+                // Only the person, from the app's own menu, changes this
+                // (for the code that runs now, like an answer to the ask).
+                let me = app.state::<App>();
+                let on = !online(&me);
+                let _ = set_net(&me.folder, on);
+                powers::apply(app, on);
             }
             "mb-open" => {
                 if let Some(w) = app.get_window("main") {
@@ -202,7 +199,7 @@ fn main() {
             // unchecked, and nobody is there to have clicked.
             // No browser tabs opened from a check or from the making window.
             let quiet = checking.is_some() || app.state::<App>().making;
-            let (net_nav, net_win) = (net.clone(), net.clone());
+            let (net_nav, net_win) = (me_web.clone(), me_web.clone());
             // OpenAs' own window may open its few help links (a new window,
             // like the token page) in the browser; it never navigates away.
             let own_links = manager;
@@ -210,14 +207,22 @@ fn main() {
             let split = !manager && checking.is_none();
             macro_rules! wire {
                 ($b:expr) => {{
-                    let (net_nav, net_win, dl) = (net_nav.clone(), net_win.clone(), dl.clone());
-                    $b
+                    let (net_nav, net_win, net_load, dl) = (net_nav.clone(), net_win.clone(), net_nav.clone(), dl.clone());
+                    // The first page, too, starts with no peer connections.
+                    #[cfg(target_os = "macos")]
+                    let b = match powers::no_peers_config(false, online(&net_load)) {
+                        Some(c) => $b.with_webview_configuration(c),
+                        None => $b,
+                    };
+                    #[cfg(not(target_os = "macos"))]
+                    let b = $b;
+                    b
                 // Links to the web open in the user's browser, never in the app window.
                 .on_navigation(move |u| {
                     let web = matches!(u.scheme(), "http" | "https") && u.host_str() != Some("app.localhost");
                     // A web link opens in the browser only if this app may use
                     // the internet: otherwise a page could send data out in a URL.
-                    if web && !quiet && net_nav.load(Ordering::SeqCst) {
+                    if web && !quiet && online(&net_nav) {
                         let _ = std::process::Command::new(if cfg!(windows) { "explorer" } else { "open" }).arg(u.as_str()).spawn();
                     }
                     // The window stays on the app: web pages open in the browser,
@@ -227,10 +232,21 @@ fn main() {
                 })
                 .on_new_window(move |u, _| {
                     // Only web pages go to the browser; never file:, ssh:, other apps' schemes.
-                    if matches!(u.scheme(), "http" | "https") && !quiet && (own_links || net_win.load(Ordering::SeqCst)) {
+                    if matches!(u.scheme(), "http" | "https") && !quiet && (own_links || online(&net_win)) {
                         let _ = std::process::Command::new(if cfg!(windows) { "explorer" } else { "open" }).arg(u.as_str()).spawn();
                     }
                     NewWindowResponse::Deny
+                })
+                // Each page starts under the answer for the code it runs: no
+                // peer connections offline, and an app that changed since
+                // the person allowed the internet asks again.
+                .on_page_load(move |w, p| {
+                    if matches!(p.event(), tauri::webview::PageLoadEvent::Started) {
+                        powers::peer_connections(&w, online(&net_load));
+                    } else {
+                        powers::sync_tick(w.app_handle(), online(&net_load));
+                        powers::ask_if_changed(w.app_handle());
+                    }
                 })
                 // Downloads (an app's Export button) land in Downloads.
                 .on_download(move |_w, event| {
@@ -347,7 +363,7 @@ fn main() {
             let undo = MenuItem::with_id(h, "undo-change", "Undo Last Change", !manager && has_history(&folder), None::<&str>)?;
             let versions = MenuItem::with_id(h, "versions", "Versions…", !manager, None::<&str>)?;
             let share = MenuItem::with_id(h, "share", "Share…", !manager, None::<&str>)?;
-            let internet = tauri::menu::CheckMenuItem::with_id(h, "internet", "Allow Internet Access", !manager, net.load(Ordering::SeqCst), None::<&str>)?;
+            let internet = tauri::menu::CheckMenuItem::with_id(h, "internet", "Allow Internet Access", !manager, online(&app.state::<App>()), None::<&str>)?;
             // While an app is being made, its menu is about the draft: save it
             // as an app once it's done, or discard it.
             let save_app = MenuItem::with_id(h, "save-app", "Save as App", false, None::<&str>)?;
@@ -389,7 +405,7 @@ fn main() {
                 &[&PredefinedMenuItem::minimize(h, None)?, &PredefinedMenuItem::maximize(h, None)?, &PredefinedMenuItem::close_window(h, None)?],
             )?;
             app.set_menu(Menu::with_items(h, &[&app_menu, &edit, &window])?)?;
-            app.manage(NetToggle { flag: net.clone(), item: internet.clone(), folder: folder.clone() });
+            app.manage(NetToggle { item: internet.clone() });
 
             if manager {
                 who::watch(app.handle().clone(), save_app, discard_app);
@@ -459,7 +475,8 @@ fn main() {
                     if reload_at.is_some_and(|t| t.elapsed() >= Duration::from_millis(if making { 900 } else { 300 })) {
                         reload_at = None;
                         if let Some(a) = &app_view {
-                            let _ = a.eval("location.reload()");
+                            let on = online(&a.app_handle().state::<App>());
+                            powers::reload(a, on);
                         }
                     }
                     let _ = undo.set_enabled(!manager && !making && has_history(&watch));

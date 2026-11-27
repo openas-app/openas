@@ -56,10 +56,20 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
 let cfg = WKWebViewConfiguration()
-// The same content policy as the real runtime (runner/src/serve.rs `policy`),
-// including the app's Internet switch.
-let network = (try? JSONSerialization.jsonObject(with: Data(contentsOf: root.deletingLastPathComponent().appendingPathComponent("permissions.json")))
-    as? [String: Any])?["network"] as? Bool ?? true
+// The same content policy as the real runtime (runner/src/serve.rs `policy`).
+// Offline, like a new app, unless the app being changed was allowed the
+// internet, or its code asks for it: the person in a check says yes.
+let switchedOn = (try? JSONSerialization.jsonObject(with: Data(contentsOf: root.deletingLastPathComponent().appendingPathComponent("permissions.json")))
+    as? [String: Any])?["network"] as? Bool ?? false
+let asksForInternet: Bool = {
+    let names = (try? FileManager.default.subpathsOfDirectory(atPath: root.path)) ?? []
+    for n in names where n.hasSuffix(".js") || n.hasSuffix(".html") || n.hasSuffix(".mjs") {
+        guard let t = try? String(contentsOf: root.appendingPathComponent(n), encoding: .utf8) else { continue }
+        if t.contains("permissions.request") && (t.contains("'internet'") || t.contains("\"internet\"") || t.contains("`internet`")) { return true }
+    }
+    return false
+}()
+let network = switchedOn || asksForInternet
 let csp = network
     ? "default-src 'self' app: data: blob: https:; script-src 'self' app: 'unsafe-inline' 'unsafe-eval'; frame-src 'self' app: data: blob:; style-src 'self' app: 'unsafe-inline' https:; img-src 'self' app: data: blob: https:; font-src 'self' app: data: https:; connect-src 'self' https: wss:; media-src 'self' app: data: blob: https:; base-uri 'none'"
     : "default-src 'self' app: data: blob:; script-src 'self' app: 'unsafe-inline' 'unsafe-eval'; style-src 'self' app: 'unsafe-inline'; img-src 'self' app: data: blob:; font-src 'self' app: data:; connect-src 'self'; media-src 'self' app: data: blob:; form-action 'none'; base-uri 'none'"
@@ -72,11 +82,12 @@ cfg.userContentController.addUserScript(WKUserScript(source: """
   const ce = console.error; console.error = (...a) => { send("console.error", a); ce(...a); };
   addEventListener("error", e => send("uncaught", [e.message, (e.filename || "").split("/").pop() + ":" + e.lineno]));
   addEventListener("unhandledrejection", e => send("rejection", [e.reason]));
+  addEventListener("securitypolicyviolation", e => send("blocked", [(e.blockedURI || "something") + " isn't allowed: an app loads files from its own folder, and uses the internet (https and wss) only after app.permissions.request(['internet']) says yes. Ask for it when the app starts, then fetch."]));
   window.alert = m => send("alert() called", [m]); window.confirm = m => { send("confirm() called", [m]); return true; }; window.prompt = m => { send("prompt() called", [m]); return null; };
   if (!window.app) { const mem = \(seed);
     // Desktop powers, simulated: a sample folder in memory, a person who says yes
     // (unless the test calls desk.deny()), a recorded menu bar. Nothing real is touched.
-    const D = window.desk = { grants: {}, deny: false, menuBar: null, notes: [], log: [], window: "shown", onTop: false,
+    const D = window.desk = { grants: \(network ? "{ internet: true }" : "{}"), deny: false, menuBar: null, notes: [], log: [], window: "shown", onTop: false,
       menu: id => fire("menu-bar", id), shortcut: t => fire("shortcut", t), shortcuts: [], runs: [], programs: {}, clickMenuBar: () => fire("menu-bar-click", null) };
     const H = {}; const fire = (ev, d) => (H[ev] || []).forEach(f => f(d));
     const day = 86400000, now = Date.now();
@@ -101,7 +112,7 @@ cfg.userContentController.addUserScript(WKUserScript(source: """
     window.app = {
       store: { get: async k => (k in mem ? structuredClone(mem[k]) : null), set: async (k, v) => { mem[k] = structuredClone(v); return true; } },
       notify: async t => { need("notifications"); D.notes.push(String(t)); return true; },
-      permissions: { has: async n => !!D.grants[n], request: async (names) => { const o = {}; for (const n of [].concat(names)) { const ok = !D.deny && ["notifications", "menu-bar", "overlay", "folder", "shortcuts", "full"].includes(n); if (ok) D.grants[n] = true; o[n] = ok; } if (o.folder) o.folderName = "Downloads"; return o; } },
+      permissions: { has: async n => !!D.grants[n], request: async (names) => { const o = {}; for (const n of [].concat(names)) { const ok = n === "internet" ? !D.deny && !!D.grants.internet : !D.deny && ["notifications", "menu-bar", "overlay", "folder", "shortcuts", "full"].includes(n); if (ok) D.grants[n] = true; o[n] = ok; } if (o.folder) o.folderName = "Downloads"; return o; } },
       files: {
         folder: fop("folder", () => ({ name: "Downloads" })),
         list: fop("list", (p = "") => { p = norm(p); if (p && !(F.get(p) || {}).dir) throw new Error("“" + p + "” isn't a folder"); return [...F.keys()].filter(k => k !== p && (p ? k.startsWith(p + "/") : true) && !k.slice(p ? p.length + 1 : 0).includes("/")).map(ent); }),

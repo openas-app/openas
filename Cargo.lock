@@ -3411,6 +3411,7 @@ dependencies = [
  "dirs",
  "libc",
  "objc2",
+ "objc2-web-kit",
  "plist",
  "serde",
  "serde_json",
