@@ -8,12 +8,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::model::{self, Client, Message};
 use crate::{check, extract, install, paths};
 
 const FORMAT: &str = include_str!("../prompts/format.md");
-/// One retry: a fix costs a full new file, and most failures are fixed in one.
-const ATTEMPTS: usize = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppInfo {
@@ -45,14 +42,6 @@ impl Spend {
             cost: 0.0,
             tokens: 0,
             cost_unknown: false,
-        }
-    }
-
-    pub fn describe(&self) -> String {
-        if self.cost_unknown {
-            format!("{} tokens · cost unknown", self.tokens)
-        } else {
-            format!("{} tokens · ${:.3}", self.tokens, self.cost)
         }
     }
 }
@@ -189,193 +178,6 @@ pub fn data_shape(folder: &Path) -> Option<String> {
     serde_json::to_string_pretty(&shape(&v)).ok()
 }
 
-/// Asks, extracts, writes and checks, with one retry. Returns the svg (if any)
-/// and the problems left.
-fn produce(
-    client: &Client,
-    model: &str,
-    mut messages: Vec<Message>,
-    folder: &Path,
-    spend: &mut Spend,
-    ev: &Events,
-) -> Result<(Option<String>, Vec<String>)> {
-    let log = ev.say;
-    let mut svg = None;
-    let mut problems = vec![];
-    for attempt in 1..=ATTEMPTS {
-        let fixing = attempt > 1;
-        log(if fixing {
-            "Fixing it…"
-        } else {
-            "Starting…"
-        });
-        let started = std::time::Instant::now();
-        let mut last = std::time::Instant::now() - std::time::Duration::from_secs(5);
-        let mut text = String::new();
-        let mut thought = String::new();
-        let mut on = |d: model::Delta| -> Result<()> {
-            if (ev.stopped)() {
-                bail!("Stopped.");
-            }
-            let due = last.elapsed().as_millis() >= 700;
-            match d {
-                model::Delta::Thinking(r) => {
-                    thought.push_str(r);
-                    if thought.len() > 4000 {
-                        let cut = thought.len() - 2000;
-                        let cut = (cut..thought.len())
-                            .find(|i| thought.is_char_boundary(*i))
-                            .unwrap_or(0);
-                        thought.drain(..cut);
-                    }
-                    if due {
-                        last = std::time::Instant::now();
-                        let what = if fixing {
-                            "Working out the fix"
-                        } else {
-                            "Thinking it through"
-                        };
-                        log(&format!("{what}… {} s", started.elapsed().as_secs()));
-                        let tail = &thought[thought.len().saturating_sub(400)..];
-                        let tail = &thought[(thought.len() - tail.len()..)
-                            .find(|i| thought.is_char_boundary(*i))
-                            .unwrap_or(0)..];
-                        (ev.thought)(tail);
-                    }
-                }
-                model::Delta::Text(t) => {
-                    text.push_str(t);
-                    if due {
-                        last = std::time::Instant::now();
-                        if let Some(html) = extract::partial_html(&text) {
-                            log(&format!(
-                                "{}… {} KB",
-                                if fixing { "Rewriting it" } else { "Writing it" },
-                                html.len() / 1024 + 1
-                            ));
-                            (ev.preview)(html);
-                        }
-                    }
-                }
-            }
-            Ok(())
-        };
-        let reply = client.chat_stream(model, &messages, model::settings().max_tokens, &mut on)?;
-        if let Some(html) = extract::partial_html(&reply.text) {
-            (ev.preview)(html);
-        }
-        match reply.cost {
-            Some(c) => spend.cost += c,
-            None => spend.cost_unknown = true,
-        }
-        spend.tokens += reply.output_tokens;
-        let parts = extract::parts(&reply.text);
-        problems.clear();
-        if reply.finish == "length" {
-            problems.push("The model was cut off before finishing.".into());
-        }
-        match &parts.html {
-            Some(html) => {
-                std::fs::create_dir_all(folder.join("app"))?;
-                std::fs::write(folder.join("app/index.html"), html)?;
-                problems.extend(extract::static_problems(html));
-                if problems.is_empty() {
-                    log("Checking that it opens…");
-                    problems.extend(check::run(folder)?.problems());
-                }
-            }
-            None => problems.push("The reply had no ```html block.".into()),
-        }
-        if parts.svg.is_some() {
-            svg = parts.svg;
-        }
-        // Wanting the internet isn't a bug to fix: the person decides.
-        if problems.is_empty() || !check::wanted_hosts(&problems).is_empty() {
-            break;
-        }
-        if attempt < ATTEMPTS {
-            log(&format!("Found a problem: {}", problems[0]));
-        }
-        if reply.finish != "length" && parts.html.is_some() {
-            messages.push(Message::new("assistant", reply.text));
-            messages.push(Message::new(
-                "user",
-                format!("The app has these problems:\n- {}\nReply with the complete corrected file, in the same format.", problems.join("\n- ")),
-            ));
-        }
-    }
-    Ok((svg, problems))
-}
-
-/// A built app that isn't an app yet: it lives in a hidden folder until it
-/// passes and is installed, so a failed build never shows up in the list.
-pub struct Draft {
-    pub dir: PathBuf,
-    pub name: String,
-    pub svg: String,
-    pub problems: Vec<String>,
-    pub spend: Spend,
-}
-
-pub fn build_draft(prompt: &str, ev: &Events) -> Result<Draft> {
-    let settings = model::settings();
-    let client = Client::new(&settings.provider)?;
-    std::fs::create_dir_all(paths::apps())?;
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let dir = paths::apps().join(format!(".draft-{nanos}"));
-    std::fs::create_dir_all(&dir)?;
-    let mut spend = Spend::zero();
-    let messages = vec![Message::new("system", FORMAT), Message::new("user", prompt)];
-    let made = produce(
-        &client,
-        &settings.build_model,
-        messages,
-        &dir,
-        &mut spend,
-        ev,
-    );
-    let (svg, problems) = match made {
-        Ok(r) => r,
-        Err(e) => {
-            let _ = std::fs::remove_dir_all(&dir);
-            return Err(e);
-        }
-    };
-    let html = std::fs::read_to_string(dir.join("app/index.html")).unwrap_or_default();
-    let name = extract::title(&html).unwrap_or_else(|| "New App".into());
-    let svg = svg.unwrap_or_else(|| install::fallback_icon(&slug(&name)));
-    std::fs::write(dir.join("prompt.txt"), prompt)?;
-    std::fs::write(dir.join("icon.svg"), &svg)?;
-    std::fs::write(
-        dir.join("draft.json"),
-        serde_json::to_string(
-            &serde_json::json!({ "provider": settings.provider, "model": settings.build_model }),
-        )?,
-    )?;
-    Ok(Draft {
-        dir,
-        name,
-        svg,
-        problems,
-        spend,
-    })
-}
-
-/// The hidden folder of a draft, by the id the window was given.
-pub fn draft_dir(id: &str) -> Result<PathBuf> {
-    if !id.starts_with(".draft-") || id.contains('/') || id.contains("..") {
-        bail!("no such draft");
-    }
-    let dir = paths::apps().join(id);
-    if !dir.is_dir() {
-        bail!("that draft is gone");
-    }
-    Ok(dir)
-}
-
 /// A name no other app's .app already has ("Habit Tracker 2"), so installing
 /// one app never replaces another. An app's own earlier copy doesn't count.
 fn free_name(name: &str, folder: &Path) -> String {
@@ -430,13 +232,6 @@ pub fn install_draft(dir: &Path, name: &str) -> Result<AppInfo> {
     Ok(info)
 }
 
-/// The person allowed this draft to use the internet: note it beside the
-/// app (the model never writes this) and check it again with access.
-pub fn allow_network_draft(dir: &Path) -> Result<Vec<String>> {
-    std::fs::write(dir.join("permissions.json"), r#"{"network":true}"#)?;
-    check_folder(dir)
-}
-
 /// Leftovers nobody installed (a crash, a closed window) go after a day. A
 /// draft from the step-wise builder (it has making.json) is on OpenAs's shelf,
 /// finished or not, and stays until the person saves or discards it.
@@ -461,42 +256,6 @@ pub fn sweep_drafts() {
             let _ = std::fs::remove_dir_all(e.path());
         }
     }
-}
-
-/// The command line's one-step version: build, and install if it passed.
-pub fn new_app(prompt: &str, ev: &Events) -> Result<Outcome> {
-    let d = build_draft(prompt, ev)?;
-    let settings = model::settings();
-    if !d.problems.is_empty() {
-        let _ = std::fs::remove_dir_all(&d.dir);
-        let info = AppInfo {
-            id: String::new(),
-            name: d.name,
-            provider: settings.provider,
-            model: settings.build_model,
-            created: now(),
-            installed: None,
-            cdhash: None,
-            shared: false,
-        };
-        return Ok(Outcome {
-            info,
-            folder: PathBuf::new(),
-            spend: d.spend,
-            problems: d.problems,
-            warning: None,
-        });
-    }
-    (ev.say)("Installing…");
-    let info = install_draft(&d.dir, &d.name)?;
-    let folder = paths::apps().join(&info.id);
-    Ok(Outcome {
-        info,
-        folder,
-        spend: d.spend,
-        problems: vec![],
-        warning: None,
-    })
 }
 
 /// A new name everywhere the app shows: its .app, the Dock, the menu bar.
@@ -793,59 +552,6 @@ pub fn find(app: &str) -> Result<PathBuf> {
         }
     }
     bail!("no app called {app}")
-}
-
-pub fn change(app: &str, request: &str, ev: &Events) -> Result<Outcome> {
-    let log = ev.say;
-    let folder = find(app)?;
-    let info = read_info(&folder)?;
-    let settings = model::settings();
-    let client = Client::new(&settings.provider)?;
-    let current = std::fs::read_to_string(folder.join("app/index.html"))?;
-    let shape = data_shape(&folder)
-        .map(|s| format!("\n\nIt has saved data with this shape (values hidden). Keep reading and writing the same keys so nothing is lost:\n```json\n{s}\n```"))
-        .unwrap_or_default();
-    let messages = vec![
-        Message::new("system", FORMAT),
-        Message::new(
-            "user",
-            format!("Here is the app as it is now:\n```html\n{current}\n```{shape}\n\nChange it: {request}\n\nReply with the complete new file only, in one ```html block (no icon: the app keeps its icon)."),
-        ),
-    ];
-    let mut spend = Spend::zero();
-    // Tried in a stage; the live app only ever sees a version that passed.
-    // The icon stays: it is in the Dock and the user knows the app by it.
-    let stage = Stage::new(&folder)?;
-    let (_svg, mut problems) = produce(
-        &client,
-        &settings.build_model,
-        messages,
-        &stage.0,
-        &mut spend,
-        ev,
-    )?;
-    let hosts = check::wanted_hosts(&problems);
-    if !hosts.is_empty() {
-        // Only the person can let it online, from the app's own menu.
-        problems = vec![format!(
-            "the change needs the internet (to reach {}). Turn on Allow Internet Access in this app's menu, then ask again.",
-            hosts.join(", ")
-        )];
-    }
-    let mut warning = None;
-    if problems.is_empty() {
-        warning = data_warning(&folder, &stage);
-        go_live(&folder, &stage, request.trim())?;
-    } else {
-        log("Kept the previous version; the change didn't pass the check.");
-    }
-    Ok(Outcome {
-        info,
-        folder,
-        spend,
-        problems,
-        warning,
-    })
 }
 
 /// Puts back the version before the last change.

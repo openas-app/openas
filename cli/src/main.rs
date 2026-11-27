@@ -17,25 +17,6 @@ fn say(s: &str) {
     eprintln!("{s}");
 }
 
-fn report(o: &make::Outcome) {
-    eprintln!("\n{}  ({})", o.info.name, o.folder.display());
-    if let Some(p) = &o.info.installed {
-        eprintln!("Installed: {}", p.display());
-    }
-    if !o.problems.is_empty() {
-        eprintln!("Still broken after one fix:");
-        for p in &o.problems {
-            eprintln!("  · {p}");
-        }
-    }
-    eprintln!(
-        "Model: {} via {} · {}",
-        o.info.model,
-        o.info.provider,
-        o.spend.describe()
-    );
-}
-
 const MANAGER_ICON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#0B0B0C"/><circle cx="422.5" cy="512" r="179" fill="none" stroke="#FFFFFF" stroke-width="128"/><rect x="716.5" y="627" width="128" height="128" fill="#FF4A1C"/></svg>"##;
 
 /// Installs "OpenAs" itself: a Runner copy marked as the manager, recorded
@@ -63,26 +44,31 @@ fn setup() -> Result<()> {
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+        // Builds an app with the step-wise builder (same limits as the window)
+        // and installs it.
         ["new", prompt] => {
-            let o = make::new_app(prompt, &make::Events::lines(&say))?;
-            report(&o);
-            if let Some(p) = &o.info.installed {
-                std::process::Command::new("open").arg(p).status()?;
-            }
-        }
-        // The step-wise builder (proof of concept, Claude).
-        ["agent-new", prompt] => {
             let (ws, f) = openas_core::agent::new_draft(prompt, &make::Events::lines(&say))?;
-            println!("draft: {}\nname: {}\nsummary: {}", ws.display(), f.name, f.summary);
             if let Some(why) = &f.unfinished {
-                println!("unfinished: {why}");
+                eprintln!("It stopped before it was finished: {why}");
+            }
+            let info = make::install_draft(&ws, &f.name)?;
+            println!("installed: {}
+summary: {}", info.name, f.summary);
+            if let Some(p) = &info.installed {
+                // A test run never brings a window in front of the person.
+                let quiet = std::env::var("OPENAS_QUIET_WINDOW").is_ok();
+                std::process::Command::new("open")
+                    .args(if quiet { &["-g"][..] } else { &[][..] })
+                    .arg(p)
+                    .status()?;
             }
         }
-        ["agent-change", app, request] => {
-            let (folder, f) = openas_core::agent::change(app, request, &make::Events::lines(&say))?;
-            // From the command line, a change is kept straight away.
+        // A change, kept straight away (in the app's column it waits for Save).
+        ["change", app, request] => {
+            let (_, f) = openas_core::agent::change(app, request, &make::Events::lines(&say))?;
             openas_core::agent::save_change(app)?;
-            println!("changed: {}\nsummary: {}", folder.display(), f.summary);
+            println!("changed: {app}
+summary: {}", f.summary);
         }
         ["make-start", request] => {
             let ws = openas_core::agent::start_make(request, &std::env::current_exe()?, true)?;
@@ -112,18 +98,6 @@ fn main() -> Result<()> {
         ["spent"] => {
             let (total, v) = openas_core::agent::spent();
             println!("total ${total:.2}\n{}", serde_json::to_string_pretty(&v["jobs"]).unwrap_or_default());
-        }
-        ["change", app, request] => {
-            let o = make::change(app, request, &make::Events::lines(&say))?;
-            report(&o);
-            if let Some(w) = &o.warning {
-                eprintln!("Note: {w}");
-            }
-            if o.problems.is_empty() {
-                eprintln!("Changed. An open window reloads by itself.");
-            } else {
-                eprintln!("Kept the previous version.");
-            }
         }
         ["undo", app] => {
             make::undo(app)?;
@@ -162,7 +136,7 @@ fn main() -> Result<()> {
         ["serve"] => helper::serve()?,
         ["mcp"] => mcp::serve()?,
         _ => bail!(
-            "usage:\n  openas new \"<what you want>\"\n  openas change <app> \"<change>\"\n  openas undo <app>\n  openas list\n  openas setup\n  openas serve\n  openas mcp"
+            "usage:\n  openas new \"<what you want>\"\n  openas change <app> \"<change>\"\n  openas undo <app>\n  openas list\n  openas share <app>\n  openas import <file.openas>\n  openas reinstall [<app>]\n  openas setup\n  openas serve\n  openas mcp"
         ),
     }
     Ok(())

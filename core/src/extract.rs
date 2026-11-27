@@ -37,18 +37,6 @@ pub fn parts(reply: &str) -> Parts {
     Parts { html, svg }
 }
 
-/// The page as written so far, while the reply is still coming: from the
-/// opening ```html fence to the end, or to where the icon's block starts.
-pub fn partial_html(text: &str) -> Option<&str> {
-    let start = text.find("```html")?;
-    let body = &text[start + 7..];
-    let body = body
-        .strip_prefix('\n')
-        .or_else(|| body.find('\n').map(|i| &body[i + 1..]))?;
-    let end = body.find("\n```").unwrap_or(body.len());
-    Some(&body[..end])
-}
-
 pub fn title(html: &str) -> Option<String> {
     let re = Regex::new(r"(?is)<title[^>]*>(.*?)</title>").unwrap();
     re.captures(html)

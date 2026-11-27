@@ -14,8 +14,6 @@ use serde_json::{json, Value};
 
 use crate::claude::{Ev, Turn};
 
-pub const HF_ROUTER: &str = "https://router.huggingface.co/v1";
-
 pub struct Oai {
     base: String,
     key: String,

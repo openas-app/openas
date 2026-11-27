@@ -13,16 +13,6 @@ use serde_json::{json, Value};
 use crate::paths;
 
 const PRESETS: &str = include_str!("../prompts/providers.json");
-const TESTED: &str = include_str!("../prompts/models.json");
-
-/// Models that passed the generation test with a provider, with what they
-/// cost per app when measured. Shown first; anything else is "your own".
-pub fn tested_models(provider_id: &str) -> Value {
-    serde_json::from_str::<Value>(TESTED)
-        .ok()
-        .and_then(|v| v.get(provider_id).cloned())
-        .unwrap_or(json!([]))
-}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Provider {
@@ -169,14 +159,6 @@ pub struct Reply {
     pub cost: Option<f64>,
 }
 
-/// What a streamed reply is doing right now.
-pub enum Delta<'a> {
-    /// The model is reasoning: the newest piece of it.
-    Thinking(&'a str),
-    /// New answer text.
-    Text(&'a str),
-}
-
 pub struct Client {
     provider: Provider,
     key: Option<String>,
@@ -279,143 +261,6 @@ impl Client {
             )),
             _ => Test::Refused(format!("{name} answered {status}. {said}")),
         }
-    }
-
-    /// A chat completion streamed piece by piece, so the person can watch it
-    /// and stop it. `on` returning an error stops the request. A provider
-    /// that ignores `stream` and answers in one piece works too.
-    /// With `OPENAS_RECORD=<file>`, the raw stream is saved (for replaying
-    /// in tests without paying for a model).
-    pub fn chat_stream(
-        &self,
-        model: &str,
-        messages: &[Message],
-        max_tokens: u32,
-        on: &mut dyn FnMut(Delta) -> Result<()>,
-    ) -> Result<Reply> {
-        use std::io::{BufRead, BufReader, Write};
-        let url = format!(
-            "{}/chat/completions",
-            self.provider.base_url.trim_end_matches('/')
-        );
-        let body = json!({ "model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.4,
-                           "stream": true, "stream_options": { "include_usage": true } });
-        let mut req = self
-            .agent
-            .post(&url)
-            .header("Content-Type", "application/json");
-        if let Some(k) = &self.key {
-            req = req.header("Authorization", &format!("Bearer {k}"));
-        }
-        let mut resp = req
-            .send_json(&body)
-            .with_context(|| format!("calling {}", self.provider.name))?;
-        let status = resp.status().as_u16();
-        let streaming = resp
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|c| c.contains("event-stream"));
-        if status != 200 || !streaming {
-            let v: Value = resp.body_mut().read_json().unwrap_or(Value::Null);
-            if status != 200 {
-                let msg = v
-                    .pointer("/error/message")
-                    .or_else(|| v.get("error"))
-                    .cloned()
-                    .unwrap_or(v.clone());
-                bail!("{} said {status}: {}", self.provider.name, msg);
-            }
-            let reply = Self::reply_of(&v)?;
-            on(Delta::Text(&reply.text))?;
-            return Ok(reply);
-        }
-        let mut record = std::env::var("OPENAS_RECORD")
-            .ok()
-            .and_then(|p| std::fs::File::create(p).ok());
-        let mut text = String::new();
-        let mut finish = String::new();
-        let (mut tokens, mut cost) = (0u64, None);
-        for line in BufReader::new(resp.body_mut().as_reader()).lines() {
-            let line = line.context("reading the model's reply")?;
-            if let Some(f) = record.as_mut() {
-                let _ = writeln!(f, "{line}");
-            }
-            let Some(data) = line.strip_prefix("data:").map(str::trim) else {
-                continue;
-            };
-            if data == "[DONE]" {
-                break;
-            }
-            let Ok(v) = serde_json::from_str::<Value>(data) else {
-                continue;
-            };
-            if let Some(e) = v.get("error") {
-                bail!(
-                    "{} stopped: {}",
-                    self.provider.name,
-                    e.get("message").and_then(Value::as_str).unwrap_or("error")
-                );
-            }
-            if let Some(u) = v.get("usage").filter(|u| !u.is_null()) {
-                tokens = u
-                    .get("completion_tokens")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(tokens);
-                cost = u.get("cost").and_then(Value::as_f64).or(cost);
-            }
-            let Some(c) = v.pointer("/choices/0") else {
-                continue;
-            };
-            if let Some(f) = c.get("finish_reason").and_then(Value::as_str) {
-                finish = f.to_string();
-            }
-            let d = c.get("delta").unwrap_or(&Value::Null);
-            if let Some(r) = d
-                .get("reasoning_content")
-                .or_else(|| d.get("reasoning"))
-                .and_then(Value::as_str)
-            {
-                on(Delta::Thinking(r))?;
-            }
-            if let Some(t) = d
-                .get("content")
-                .and_then(Value::as_str)
-                .filter(|t| !t.is_empty())
-            {
-                text.push_str(t);
-                on(Delta::Text(t))?;
-            }
-        }
-        Ok(Reply {
-            text,
-            finish,
-            output_tokens: tokens,
-            cost,
-        })
-    }
-
-    fn reply_of(v: &Value) -> Result<Reply> {
-        let choice = v
-            .pointer("/choices/0")
-            .ok_or_else(|| anyhow!("no answer in the reply"))?;
-        Ok(Reply {
-            text: choice
-                .pointer("/message/content")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string(),
-            finish: choice
-                .get("finish_reason")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string(),
-            output_tokens: v
-                .pointer("/usage/completion_tokens")
-                .and_then(Value::as_u64)
-                .unwrap_or(0),
-            cost: v.pointer("/usage/cost").and_then(Value::as_f64),
-        })
     }
 
     pub fn chat(&self, model: &str, messages: &[Message], max_tokens: u32) -> Result<Reply> {

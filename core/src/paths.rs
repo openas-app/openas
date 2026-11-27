@@ -74,7 +74,3 @@ pub fn socket_for(root: &std::path::Path) -> PathBuf {
     }
     std::env::temp_dir().join(format!("openas-{h:016x}.sock"))
 }
-
-pub fn usage_log() -> PathBuf {
-    root().join("usage.jsonl")
-}

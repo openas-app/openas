@@ -165,17 +165,6 @@ fn allowed(caller: &Caller, op: &str, app: Option<&str>) -> bool {
     }
 }
 
-fn log_usage(app: &str, op: &str, spend: &make::Spend, caller: &Caller) {
-    let line = json!({ "t": now(), "app": app, "op": op, "tokens": spend.tokens, "cost": spend.cost, "by": format!("{caller:?}") });
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(paths::usage_log())
-    {
-        let _ = writeln!(f, "{line}");
-    }
-}
-
 fn b64(bytes: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
@@ -211,20 +200,6 @@ pub enum Request {
         /// it shows the draft in place.
         #[serde(default = "yes")]
         window: bool,
-    },
-    /// Built as a draft; it becomes an app with `Install`.
-    New {
-        prompt: String,
-    },
-    Install {
-        draft: String,
-        name: String,
-    },
-    AllowNetwork {
-        draft: String,
-    },
-    Discard {
-        draft: String,
     },
     Rename {
         app: String,
@@ -287,7 +262,6 @@ pub enum Request {
         monthly: f64,
         per_app: f64,
     },
-    Usage,
 }
 
 impl Request {
@@ -295,10 +269,6 @@ impl Request {
     pub fn op(&self) -> &'static str {
         match self {
             Request::Make { .. } => "make",
-            Request::New { .. } => "new",
-            Request::Install { .. } => "install",
-            Request::AllowNetwork { .. } => "allow_network",
-            Request::Discard { .. } => "discard",
             Request::Rename { .. } => "rename",
             Request::Change { .. } => "change",
             Request::SaveChange { .. } => "save_change",
@@ -315,7 +285,6 @@ impl Request {
             Request::Connect { .. } => "connect",
             Request::SettingsSet { .. } => "settings_set",
             Request::LimitsSet { .. } => "limits_set",
-            Request::Usage => "usage",
         }
     }
 
@@ -354,42 +323,6 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
         Request::Make { request, window } => {
             let ws = openas_core::agent::start_make(&request, &std::env::current_exe()?, window)?;
             Ok(json!({ "draft": ws.file_name().map(|f| f.to_string_lossy().into_owned()) }))
-        }
-        Request::New { prompt } => {
-            let d = make::build_draft(&prompt, ev)?;
-            log_usage(&d.name, op, &d.spend, caller);
-            let id = d
-                .dir
-                .file_name()
-                .map(|f| f.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let png = d.dir.join("icon.png");
-            let icon = install::render_png(&d.svg, &png)
-                .ok()
-                .and_then(|_| std::fs::read(&png).ok())
-                .map(|b| format!("data:image/png;base64,{}", b64(&b)));
-            Ok(
-                json!({ "draft": id, "name": d.name, "problems": d.problems, "icon": icon,
-                       "wants_network": openas_core::check::wanted_hosts(&d.problems),
-                       "cost": if d.spend.cost_unknown { Value::Null } else { json!(d.spend.cost) } }),
-            )
-        }
-        Request::Install { draft, name } => {
-            say("Adding it to your Applications…");
-            let info = make::install_draft(&make::draft_dir(&draft)?, &name)?;
-            if let Some(p) = &info.installed {
-                std::process::Command::new("open").arg(p).status()?;
-            }
-            Ok(json!({ "id": info.id, "name": info.name }))
-        }
-        Request::AllowNetwork { draft } => {
-            say("Checking it again with internet access…");
-            let problems = make::allow_network_draft(&make::draft_dir(&draft)?)?;
-            Ok(json!({ "problems": problems }))
-        }
-        Request::Discard { draft } => {
-            std::fs::remove_dir_all(make::draft_dir(&draft)?)?;
-            Ok(json!({ "discarded": true }))
         }
         Request::Rename { app, name } => {
             let info = make::rename(&app, &name)?;
@@ -558,17 +491,6 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
             model::save_settings(&s)?;
             Ok(json!({ "saved": true }))
         }
-        Request::Usage => {
-            let text = std::fs::read_to_string(paths::usage_log()).unwrap_or_default();
-            let (mut cost, mut n) = (0.0, 0);
-            for l in text.lines() {
-                if let Ok(v) = serde_json::from_str::<Value>(l) {
-                    cost += v.get("cost").and_then(Value::as_f64).unwrap_or(0.0);
-                    n += 1;
-                }
-            }
-            Ok(json!({ "requests": n, "cost": cost }))
-        }
     }
 }
 
@@ -711,21 +633,17 @@ mod tests {
         assert!(allowed(&me, "undo", Some("plants")));
         assert!(!allowed(&me, "change", Some("orders")));
         for op in [
-            "new",
-            "install",
-            "allow_network",
-            "discard",
+            "make",
             "rename",
             "list",
             "open",
             "settings",
             "settings_set",
             "connect",
-            "usage",
         ] {
             assert!(!allowed(&me, op, Some("plants")), "{op}");
         }
-        assert!(allowed(&Caller::Manager, "new", None));
+        assert!(allowed(&Caller::Manager, "make", None));
         assert!(allowed(&Caller::Owner, "settings_set", None));
     }
 
