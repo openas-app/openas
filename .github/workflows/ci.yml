@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, windows]
   pull_request:
 
 jobs:
@@ -22,3 +22,14 @@ jobs:
         run: cargo test
       - name: Simulated desktop compiles
         run: swiftc -O tools/snap.swift -o target/snap
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo check --workspace --all-targets
+      - name: Test
+        run: cargo test --workspace
