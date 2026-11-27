@@ -8,7 +8,7 @@
 It gets its own window, name, icon and Dock entry. Change it later by asking,
 from inside the app, and go back to any earlier version.
 
-<!-- The demo film goes here: an app being made, 10 to 20 seconds. -->
+https://github.com/user-attachments/assets/7f2648a0-6804-4af4-a15f-95274510b13d
 
 Bring your own model: Claude, an open model through a provider (OpenRouter,
 Hugging Face, Together, Groq, Fireworks), or one running on your Mac (Ollama,
