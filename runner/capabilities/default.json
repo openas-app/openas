@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "What an app page may call through Tauri's plugins: nothing. Notifications, files and the menu bar go through OpenAs' own commands, which check the person's grants.",
+  "description": "What an app page may call through Tauri's plugins: dragging the window, and asking whether notifications are allowed (the notification plugin's own page script asks on load). Sending notifications, files and the menu bar go through OpenAs' own commands, which check the person's grants.",
   "windows": [
     "main"
   ],
@@ -11,5 +11,5 @@
       "http://app.localhost/*"
     ]
   },
-  "permissions": ["core:window:allow-start-dragging"]
+  "permissions": ["core:window:allow-start-dragging", "notification:allow-is-permission-granted"]
 }

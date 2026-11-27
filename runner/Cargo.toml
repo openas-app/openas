@@ -18,14 +18,16 @@ tauri = { version = "=2.12.7", features = ["unstable", "tray-icon", "image-png"]
 tauri-plugin-notification = "=2.8.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-plist = "1"
+openas-platform = { path = "../platform" }
 dirs = "7"
 tauri-plugin-dialog = "2"
 trash = "5"
 tauri-plugin-global-shortcut = "2"
-libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 block2 = "0.6"
 objc2-web-kit = { version = "0.3.2", default-features = false, features = ["std", "WKWebViewConfiguration", "WKPreferences", "WKWebsiteDataStore"] }
+
+[target.'cfg(windows)'.dependencies]
+tauri-plugin-single-instance = "2"

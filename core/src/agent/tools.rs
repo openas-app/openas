@@ -345,10 +345,42 @@ pub(super) fn run_tool(
     }
 }
 
-pub(super) fn snap_exe() -> PathBuf {
-    std::env::var("OPENAS_SNAP")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::runner_bundle().with_file_name("snap"))
+/// A copy of a PNG no larger than `max` pixels on its longer side.
+fn shrink_png(from: &Path, to: &Path, max: u32) -> Result<()> {
+    use resvg::tiny_skia::{FilterQuality, Pixmap, PixmapPaint, Transform};
+    let src = Pixmap::load_png(from)?;
+    let scale = (max as f32 / src.width().max(src.height()) as f32).min(1.0);
+    let (w, h) = (
+        ((src.width() as f32 * scale).round() as u32).max(1),
+        ((src.height() as f32 * scale).round() as u32).max(1),
+    );
+    let mut out = Pixmap::new(w, h).ok_or_else(|| anyhow::anyhow!("pixmap"))?;
+    out.draw_pixmap(
+        0,
+        0,
+        src.as_ref(),
+        &PixmapPaint {
+            quality: FilterQuality::Bicubic,
+            ..Default::default()
+        },
+        Transform::from_scale(scale, scale),
+        None,
+    );
+    out.save_png(to)?;
+    Ok(())
+}
+
+/// The builder's eyes: the Runner in snap mode (runner/src/snap.rs), or a
+/// stand-in taking the same arguments (OPENAS_SNAP, for tests).
+pub(super) fn snap_command() -> Command {
+    match std::env::var("OPENAS_SNAP") {
+        Ok(p) => Command::new(p),
+        Err(_) => {
+            let mut c = Command::new(paths::runner_exe());
+            c.arg("--snap");
+            c
+        }
+    }
 }
 
 pub(super) fn check_tool(
@@ -387,7 +419,7 @@ pub(super) fn check_tool(
         .get("appearance")
         .and_then(Value::as_str)
         .unwrap_or("light");
-    let out = Command::new(snap_exe())
+    let out = snap_command()
         .arg(ws.join("app"))
         .arg(&shot)
         .args([&w, &h])
@@ -400,7 +432,13 @@ pub(super) fn check_tool(
         .stderr(std::process::Stdio::null())
         .output()
         .context("starting the screenshot helper")?;
+    // The report on stdout, or the copy beside the screenshot (a windowed
+    // program's stdout may not reach us on every system).
     let snap: Value = serde_json::from_slice(&out.stdout)
+        .ok()
+        .or_else(|| {
+            serde_json::from_slice(&std::fs::read(shot.with_extension("png.json")).ok()?).ok()
+        })
         .unwrap_or(json!({ "errors": ["the screenshot window did not report back"] }));
     // What the test did with the pointer, for the person to watch.
     if snap
@@ -448,14 +486,7 @@ pub(super) fn check_tool(
     let mut text = text.to_string();
     let mut content = vec![];
     if shot.exists() {
-        let _ = Command::new("/usr/bin/sips")
-            .args(["-Z", "1400"])
-            .arg(&shot)
-            .arg("--out")
-            .arg(&small)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+        let _ = shrink_png(&shot, &small, 1400);
         if let Ok(png) = std::fs::read(&small) {
             content.push(json!({ "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": b64(&png) } }));
             // Keep the latest look for the person watching.

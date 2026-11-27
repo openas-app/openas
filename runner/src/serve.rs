@@ -37,7 +37,10 @@ pub(crate) fn oa_bridge(name: &str) -> String {
     state: () => call("talk_state"), note: text => call("talk_note", {{ text }}), stopMaking: () => call("talk_stop"),
     code: () => call("talk_code"), hide: () => call("talk_close"), choose: (save, name) => call("talk_choose", {{ save, name }}), carryOn: text => call("talk_continue", {{ text }}), codeView: open => call("draft_code_view", {{ open }}), full: open => call("draft_full", {{ open }}), ask: save => call("talk_ask", {{ save }}), shared: () => call("shared_pending"),
     drafts: () => call("drafts_list"), showDraft: id => call("draft_show", {{ id }}), home: () => call("draft_home") }});
+  // On Windows the window keeps its own title bar: no room for traffic lights.
+  if ({win}) document.documentElement.classList.add("win");
 }})();"#,
+        win = cfg!(windows),
         name = serde_json::to_string(name).unwrap()
     )
 }
@@ -96,6 +99,10 @@ pub(crate) fn mime(path: &Path) -> &'static str {
         "png" => "image/png",
         "jpg" | "jpeg" => "image/jpeg",
         "woff2" => "font/woff2",
+        "woff" => "font/woff",
+        "wasm" => "application/wasm",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
         _ => "application/octet-stream",
     }
 }

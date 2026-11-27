@@ -24,7 +24,36 @@ pub(super) static DOING_RE: std::sync::LazyLock<regex::Regex> = std::sync::LazyL
 /// Starts a spending-limit error, so the column can offer a way out.
 pub const LIMIT_MARK: &str = "[limit]";
 
-pub(super) const BUILDER: &str = include_str!("../../prompts/builder.md");
+const BUILDER_MD: &str = include_str!("../../prompts/builder.md");
+
+/// Where the builder's instructions name the Mac, what they say on Windows.
+const ON_WINDOWS: [(&str, &str); 12] = [
+    ("on their own Mac", "on their own Windows PC"),
+    ("its own name and icon in the Dock", "its own name and icon on the taskbar"),
+    ("macOS asks the person the first time", "Windows asks the person the first time"),
+    ("(shows it in Finder)", "(shows it in File Explorer)"),
+    ("full access to the Mac", "full access to the computer"),
+    ("in the macOS menu bar (text only, no image; a single symbol character like ◷ may lead the title)", "in the system tray (Windows shows the app's icon there, with the title as its tooltip)"),
+    ("While it's there, closing the window keeps the app running in the menu bar", "While it's there, closing the window keeps the app running in the tray"),
+    ("\"/bin/zsh\" with [\"-lc\", \"…\"]", "\"cmd\" with [\"/c\", \"…\"] or \"powershell\" with [\"-NoProfile\", \"-Command\", \"…\"]"),
+    ("everyday ones like ⌘C", "everyday ones like Ctrl+C"),
+    ("keyboard shortcuts a Mac user expects", "keyboard shortcuts a Windows user expects"),
+    ("Feels like a Mac app", "Feels like a Windows app"),
+    ("OpenAs gives it the macOS icon shape, size and shadow", "OpenAs gives it a rounded shape, size and shadow"),
+];
+
+/// The builder's instructions for the system it runs on.
+pub(super) fn builder_prompt() -> std::borrow::Cow<'static, str> {
+    if cfg!(windows) {
+        let mut s = BUILDER_MD.to_string();
+        for (mac, win) in ON_WINDOWS {
+            s = s.replace(mac, win);
+        }
+        std::borrow::Cow::Owned(s)
+    } else {
+        std::borrow::Cow::Borrowed(BUILDER_MD)
+    }
+}
 pub const MODEL_DEFAULT: &str = "claude-opus-5-5";
 pub(super) fn model() -> String {
     std::env::var("OPENAS_AGENT_MODEL").unwrap_or_else(|_| crate::model::settings().build_model)
@@ -81,3 +110,18 @@ pub use turn::run;
 // The modules share their helpers with each other through here.
 use spend::*;
 use tools::*;
+
+#[cfg(test)]
+mod prompt_tests {
+    /// Every Mac phrase the Windows wording replaces is still in the
+    /// instructions (an edit there must update the list).
+    #[test]
+    fn the_windows_wording_still_applies() {
+        for (mac, _) in super::ON_WINDOWS {
+            assert!(
+                super::BUILDER_MD.contains(mac),
+                "builder.md no longer says: {mac}"
+            );
+        }
+    }
+}

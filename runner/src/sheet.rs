@@ -23,13 +23,6 @@ pub(crate) fn ask(app: &AppHandle, save: bool) {
         .as_str()
         .unwrap_or("")
         .to_string();
-    // The dialog shows the app being saved, not OpenAs.
-    let icon = me.folder.join("icon.svg");
-    let icon = icon.exists().then(|| icon.to_string_lossy().into_owned());
-    let Ok(win) = talk.window().ns_window() else {
-        return;
-    };
-    let win = win as usize;
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
         let answer = move |name: Option<String>| {
@@ -46,17 +39,45 @@ pub(crate) fn ask(app: &AppHandle, save: bool) {
             let _ = t.eval(js);
         };
         #[cfg(target_os = "macos")]
-        unsafe {
-            mac::sheet(
-                win as *mut std::ffi::c_void,
-                save,
-                &name,
-                icon.as_deref(),
-                answer,
-            )
-        };
+        {
+            // The dialog shows the app being saved, not OpenAs.
+            let icon = me.folder.join("icon.svg");
+            let icon = icon.exists().then(|| icon.to_string_lossy().into_owned());
+            if let Ok(win) = talk.window().ns_window() {
+                // SAFETY: the window pointer is this live build window, used
+                // on the main thread.
+                unsafe { mac::sheet(win, save, &name, icon.as_deref(), answer) };
+            }
+        }
         #[cfg(not(target_os = "macos"))]
-        let _ = (win, icon, answer);
+        {
+            // Windows: the system's own question; the app keeps the name the
+            // builder gave it (it can be renamed after).
+            use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+            let shown = if name.is_empty() {
+                "this app".to_string()
+            } else {
+                format!("\u{201c}{name}\u{201d}")
+            };
+            let (text, yes) = if save {
+                (format!("Save {shown} as an app?"), "Save as App")
+            } else {
+                (format!("Discard {shown}? It won't be saved."), "Discard")
+            };
+            talk.app_handle()
+                .dialog()
+                .message(text)
+                .title(if save { "Save as App" } else { "Discard" })
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    yes.into(),
+                    "Cancel".into(),
+                ))
+                .show(move |ok| {
+                    if ok {
+                        answer(save.then_some(name));
+                    }
+                });
+        }
     });
 }
 

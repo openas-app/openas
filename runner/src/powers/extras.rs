@@ -95,9 +95,25 @@ pub fn menubar_set(
     } else {
         // Text only, like other menu bar items (the app's colour icon would
         // look out of place up there; a symbol can go in the title).
-        let t = TrayIconBuilder::with_id("app")
+        #[allow(unused_mut)]
+        let mut b = TrayIconBuilder::with_id("app");
+        // Windows' tray shows an icon, never text: the app's own icon, with
+        // the title in its tooltip.
+        #[cfg(windows)]
+        {
+            if let Ok(img) = tauri::image::Image::from_path(me.folder.join("icon.png")) {
+                b = b.icon(img);
+            } else if let Some(i) = app.default_window_icon() {
+                b = b.icon(i.clone());
+            }
+        }
+        let t = b
             .title(&title)
-            .tooltip(&tip)
+            .tooltip(if cfg!(windows) && !title.is_empty() {
+                &title
+            } else {
+                &tip
+            })
             .menu(&menu)
             .show_menu_on_left_click(true)
             .on_tray_icon_event(|t, e| {
@@ -208,15 +224,12 @@ pub fn run_program(
     use std::io::{Read, Write};
     use std::process::{Command, Stdio};
     const CAP: usize = 8 << 20;
-    // Apps opened from the Finder get a bare PATH; give them the usual one.
-    let path = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
-    use std::os::unix::process::CommandExt;
-    let mut child = Command::new(program)
-        .args(args)
-        // Its own process group, so a time limit stops everything it started.
-        .process_group(0)
-        .current_dir(cwd)
-        .env("PATH", path)
+    // Its own group (and on a Mac the usual PATH, which apps opened from the
+    // Finder lack), so a time limit stops everything it started.
+    let mut cmd = Command::new(program);
+    cmd.args(args).current_dir(cwd);
+    openas_platform::proc::grouped(&mut cmd);
+    let mut child = cmd
         .stdin(if stdin.is_some() {
             Stdio::piped()
         } else {
@@ -226,6 +239,7 @@ pub fn run_program(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("couldn't run “{program}”: {e}"))?;
+    let group = openas_platform::proc::Group::of(&child);
     if let (Some(text), Some(mut w)) = (stdin, child.stdin.take()) {
         std::thread::spawn(move || {
             let _ = w.write_all(text.as_bytes());
@@ -268,10 +282,7 @@ pub fn run_program(
             break Some(st);
         }
         if start.elapsed().as_millis() as u64 > timeout_ms {
-            // SAFETY: kill(2) takes no pointers. The child was started as
-            // the leader of its own group (pgid = pid), so the negative pid
-            // reaches it and everything it started, and nothing else.
-            unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL) };
+            group.kill();
             let _ = child.kill();
             timed_out = true;
             break child.wait().ok();

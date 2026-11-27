@@ -204,11 +204,7 @@ pub fn file_op(root: &Path, op: &str, a: &Value) -> Result<Value, String> {
         }
         "reveal" => {
             let p = resolve(root, s("path"), true)?;
-            std::process::Command::new("/usr/bin/open")
-                .arg("-R")
-                .arg(&p)
-                .status()
-                .map_err(|e| e.to_string())?;
+            openas_platform::reveal(&p);
             Ok(json!(true))
         }
         _ => Err(format!("unknown file call “{op}”")),

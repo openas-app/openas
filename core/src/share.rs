@@ -8,7 +8,6 @@
 //! no links, no paths outside, and size limits.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
@@ -47,15 +46,7 @@ pub fn export(app_folder: &Path, dir: Option<&Path>) -> Result<PathBuf> {
             out = out_dir.join(format!("{safe} {n}.openas"));
             n += 1;
         }
-        let ok = Command::new("/usr/bin/ditto")
-            .args(["-c", "-k", "--norsrc", "--noextattr"])
-            .arg(&stage)
-            .arg(&out)
-            .status()?
-            .success();
-        if !ok {
-            bail!("couldn't write the shared file");
-        }
+        zip_dir(&stage, &out).context("couldn't write the shared file")?;
         Ok(out)
     })();
     let _ = std::fs::remove_dir_all(&stage);
@@ -87,15 +78,7 @@ pub fn open(file: &Path) -> Result<Received> {
         name: String::new(),
         made_with: String::new(),
     };
-    let ok = Command::new("/usr/bin/ditto")
-        .args(["-x", "-k", "--norsrc", "--noextattr"])
-        .arg(file)
-        .arg(&dir)
-        .status()?
-        .success();
-    if !ok {
-        bail!("This isn't a shared app OpenAs can open.");
-    }
+    unzip(file, &dir)?;
     let (mut bytes, mut files) = (0u64, 0usize);
     check_tree(&dir, &dir, &mut bytes, &mut files)?;
     if bytes > MAX_BYTES * 2 || files > MAX_FILES {
@@ -205,6 +188,80 @@ fn unique() -> String {
     format!("{}-{n}", std::process::id())
 }
 
+/// A zip of the folder's contents (paths relative to it, `/` between
+/// parts), the layout `ditto -c -k` wrote before.
+fn zip_dir(dir: &Path, out: &Path) -> Result<()> {
+    use std::io::Write;
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    let mut z = zip::ZipWriter::new(std::fs::File::create(out)?);
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let mut entries: Vec<_> = std::fs::read_dir(&d)?.flatten().collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            let p = e.path();
+            let rel = p
+                .strip_prefix(dir)?
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
+            let meta = std::fs::symlink_metadata(&p)?;
+            if meta.is_dir() {
+                z.add_directory(format!("{rel}/"), opts)?;
+                stack.push(p);
+            } else if meta.is_file() {
+                z.start_file(rel, opts)?;
+                z.write_all(&std::fs::read(&p)?)?;
+            }
+        }
+    }
+    z.finish()?;
+    Ok(())
+}
+
+/// Unpacks a shared file. Every entry must stay inside `dir` (no absolute
+/// paths, no `..`), links are refused, and what comes out is capped, so a
+/// small file can't unpack into a huge one.
+fn unzip(file: &Path, dir: &Path) -> Result<()> {
+    use std::io::Read;
+    let bad = || anyhow::anyhow!("This isn't a shared app OpenAs can open.");
+    let mut z = zip::ZipArchive::new(std::fs::File::open(file)?).map_err(|_| bad())?;
+    if z.len() > MAX_FILES * 2 {
+        bail!("This shared app is too big.");
+    }
+    let mut left = MAX_BYTES * 2;
+    for i in 0..z.len() {
+        let mut f = z.by_index(i).map_err(|_| bad())?;
+        let Some(rel) = f.enclosed_name() else {
+            bail!("This shared app reaches outside itself.");
+        };
+        if f.is_symlink() {
+            bail!("This shared app contains a link, which isn't allowed.");
+        }
+        let to = dir.join(rel);
+        if f.is_dir() {
+            std::fs::create_dir_all(&to)?;
+            continue;
+        }
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut buf = Vec::new();
+        (&mut f)
+            .take(left + 1)
+            .read_to_end(&mut buf)
+            .map_err(|_| bad())?;
+        if buf.len() as u64 > left {
+            bail!("This shared app is too big.");
+        }
+        left -= buf.len() as u64;
+        std::fs::write(&to, buf)?;
+    }
+    Ok(())
+}
+
 fn check_tree(root: &Path, d: &Path, bytes: &mut u64, files: &mut usize) -> Result<()> {
     for e in std::fs::read_dir(d)?.flatten() {
         let p = e.path();
@@ -239,4 +296,78 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("oa-share-{tag}-{}", unique()));
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn sample(d: &Path) {
+        std::fs::create_dir_all(d.join("app/img")).unwrap();
+        std::fs::write(d.join("app/index.html"), "<h1>hi</h1>").unwrap();
+        std::fs::write(d.join("app/img/a.svg"), "<svg/>").unwrap();
+        std::fs::write(d.join("icon.svg"), "<svg/>").unwrap();
+        std::fs::write(d.join("openas.json"), r#"{"format":1,"name":"Tea"}"#).unwrap();
+    }
+
+    #[test]
+    fn a_shared_file_round_trips() {
+        let (src, out) = (tmp("src"), tmp("out"));
+        sample(&src);
+        let file = out.join("Tea.openas");
+        zip_dir(&src, &file).unwrap();
+        let r = open(&file).unwrap();
+        assert_eq!(r.name, "Tea");
+        assert_eq!(
+            std::fs::read_to_string(r.dir.join("app/img/a.svg")).unwrap(),
+            "<svg/>"
+        );
+        let _ = std::fs::remove_dir_all(src);
+        let _ = std::fs::remove_dir_all(out);
+    }
+
+    /// Files shared from OpenAs before this change were written by ditto.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn a_file_written_by_ditto_still_opens() {
+        let (src, out) = (tmp("dsrc"), tmp("dout"));
+        sample(&src);
+        let file = out.join("Tea.openas");
+        assert!(std::process::Command::new("/usr/bin/ditto")
+            .args(["-c", "-k", "--norsrc", "--noextattr"])
+            .arg(&src)
+            .arg(&file)
+            .status()
+            .unwrap()
+            .success());
+        let r = open(&file).unwrap();
+        assert_eq!(r.name, "Tea");
+        assert!(r.dir.join("app/index.html").is_file());
+        let _ = std::fs::remove_dir_all(src);
+        let _ = std::fs::remove_dir_all(out);
+    }
+
+    #[test]
+    fn a_file_that_reaches_outside_is_refused() {
+        use std::io::Write;
+        let out = tmp("evil");
+        let file = out.join("Evil.openas");
+        let mut z = zip::ZipWriter::new(std::fs::File::create(&file).unwrap());
+        let o = zip::write::SimpleFileOptions::default();
+        z.start_file("app/index.html", o).unwrap();
+        z.write_all(b"<h1>x</h1>").unwrap();
+        z.start_file("../escaped.txt", o).unwrap();
+        z.write_all(b"x").unwrap();
+        z.finish().unwrap();
+        let e = open(&file).err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(e.contains("outside"), "{e}");
+        assert!(!out.parent().unwrap().join("escaped.txt").exists());
+        let _ = std::fs::remove_dir_all(out);
+    }
 }

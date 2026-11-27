@@ -15,7 +15,9 @@ Hugging Face, Together, Groq, Fireworks), or one running on your Mac (Ollama,
 LM Studio, vLLM). No account, no server, no subscription. You see what an app
 will cost before anything is spent.
 
-Status: early. macOS only for now.
+Status: early. macOS, and Windows in preview: it builds and passes its tests on
+Windows (CI installs an app, checks it and takes the builder's screenshot), but
+hasn't been used by people there yet.
 
 ## Install
 
@@ -27,6 +29,18 @@ You need Rust ([rustup.rs](https://rustup.rs)) and Apple's command line tools
 The first build takes a few minutes. OpenAs then opens from `~/Applications`.
 It keeps using the folder you cloned, so leave that folder where it is (and
 don't `cargo clean` it); after moving it, run `./install.sh` again.
+
+### Windows (preview)
+
+You need Rust ([rustup.rs](https://rustup.rs), with the Visual Studio C++ build
+tools it offers to install) and the WebView2 runtime (part of Windows 11). In
+PowerShell:
+
+    git clone https://github.com/openas-app/openas; cd openas; ./install.ps1
+
+OpenAs and the apps it makes go to `%LOCALAPPDATA%\Programs\OpenAs`, each with a
+Start menu entry of its own; no admin rights are needed. The programs aren't
+signed yet, so Windows may warn the first time one opens.
 
 ## First app
 
@@ -101,20 +115,25 @@ A shared app starts with no permissions and can never get full access.
 
 ## How it's built
 
-- `runner/`: the one window type (Tauri 2, the system's WebKit). It serves an app's
+- `runner/`: the one window type (Tauri 2, the system's web view: WebKit on a Mac,
+  WebView2 on Windows). It serves an app's
   folder (`serve.rs`), gives its page `window.app` (`api.rs`), enforces what it may
   do (`powers/`), and holds the making and change column (`talk.rs`). Every
   installed app is a renamed copy of it.
-- `core/`: providers and keys (Keychain), the builder in `agent/` (the loop in
+- `core/`: providers and keys (Keychain, or Credential Manager on Windows), the builder in `agent/` (the loop in
   `turn.rs`, its tools in `tools.rs`, spending in `spend.rs`), installing, versions
   and shared files.
-- `cli/`: the `openas` command and the Helper, a local socket that apps talk to
-  for changes. It only answers OpenAs's own window and apps whose code it installed
+- `cli/`: the `openas` command and the Helper, a local socket (a named pipe on
+  Windows) that apps talk to for changes. It only answers OpenAs's own window and apps whose code it installed
   (`cli/tests/helper_refuses.rs` checks that).
-- `tools/snap.swift`: a simulated desktop where the builder checks apps (screenshots,
-  clicks, a fake camera, a sample folder) without touching anything real.
+- `runner/src/snap.rs` (`Runner --snap`): a simulated desktop where the builder
+  checks apps (screenshots, clicks, a fake camera, a sample folder) without
+  touching anything real.
+- `platform/`: everything that differs between macOS and Windows (installing a
+  copy, the Helper's line, child processes). No other part checks the system.
 
-An app is a plain folder in `~/Library/Application Support/OpenAs/apps/`:
+An app is a plain folder in `~/Library/Application Support/OpenAs/apps/`
+(`%APPDATA%\OpenAs\apps\` on Windows):
 
     app/            the app's code (HTML, CSS, JavaScript)
     data/           what the app saves; changes never rewrite it
@@ -134,6 +153,9 @@ installed copies carry them in their bundle.
    versions, and the spending record).
 3. In Keychain Access, delete the items named `OpenAs` (your provider keys).
 4. Delete the folder you cloned.
+
+On Windows: delete `%LOCALAPPDATA%\Programs\OpenAs` and `%APPDATA%\OpenAs`, the
+apps' entries in the Start menu, and the `OpenAs` items in Credential Manager.
 
 ## Contributing
 

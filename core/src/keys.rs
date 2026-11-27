@@ -1,4 +1,5 @@
-//! Provider keys. On a Mac they live in the login Keychain (service
+//! Provider keys. On Windows they live in Credential Manager (see the end
+//! of this file). On a Mac they live in the login Keychain (service
 //! "OpenAs", one item per provider), entered once in the OpenAs window.
 //! They are written and read through Apple's `security` tool, so rebuilding
 //! OpenAs never brings up a Keychain prompt. That keeps keys out of files
@@ -10,10 +11,12 @@
 //! settings only say whether one is set.
 
 use anyhow::{bail, Result};
+#[cfg(target_os = "macos")]
 use std::process::{Command, Stdio};
 
 const SERVICE: &str = "OpenAs";
 /// Where keys were kept before the rename: read as a fallback, never copied.
+#[cfg(target_os = "macos")]
 const OLD_SERVICE: &str = "Open Apps";
 
 fn service() -> String {
@@ -85,38 +88,36 @@ pub fn remove(provider: &str) {
         .status();
 }
 
-// Elsewhere (until Windows Credential Manager is wired up): a file only this
-// user can read, in the data folder.
+// Elsewhere: the system's credential store (Windows Credential Manager),
+// one item per provider under the same service name.
 #[cfg(not(target_os = "macos"))]
-fn file() -> std::path::PathBuf {
-    crate::paths::root().join("keys.json")
+fn entry(service: &str, provider: &str) -> Option<keyring::Entry> {
+    keyring::Entry::new(service, provider).ok()
 }
 
 #[cfg(not(target_os = "macos"))]
 pub fn get(provider: &str) -> Option<String> {
-    let m: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(file()).ok()?).ok()?;
-    m.get(provider)?.as_str().map(str::to_owned)
+    let read = |s: &str| {
+        entry(s, provider)?
+            .get_password()
+            .ok()
+            .filter(|k| !k.is_empty())
+    };
+    read(&service()).or_else(|| (service() != SERVICE).then(|| read(SERVICE)).flatten())
 }
 
 #[cfg(not(target_os = "macos"))]
 pub fn set(provider: &str, key: &str) -> Result<()> {
-    let mut m: serde_json::Map<String, serde_json::Value> = std::fs::read_to_string(file())
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default();
-    m.insert(provider.into(), key.into());
-    std::fs::create_dir_all(crate::paths::root())?;
-    std::fs::write(file(), serde_json::to_string(&m)?)?;
+    let ok = entry(&service(), provider).is_some_and(|e| e.set_password(key).is_ok());
+    if !ok {
+        bail!("couldn't save the key in the credential store");
+    }
     Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
 pub fn remove(provider: &str) {
-    if let Some(mut m) = std::fs::read_to_string(file())
-        .ok()
-        .and_then(|t| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&t).ok())
-    {
-        m.remove(provider);
-        let _ = std::fs::write(file(), serde_json::to_string(&m).unwrap_or_default());
+    if let Some(e) = entry(&service(), provider) {
+        let _ = e.delete_credential();
     }
 }

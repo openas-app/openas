@@ -14,7 +14,7 @@ pub(crate) struct App {
     pub(crate) manager: bool,
     /// A draft being made: the column shows the making and can't be closed.
     pub(crate) making: bool,
-    /// A non-default setup from the plist, passed on to the Helper.
+    /// A non-default setup carried in the copy, passed on to the Helper.
     pub(crate) env: Vec<(String, String)>,
 }
 
@@ -39,42 +39,19 @@ pub(crate) struct Store {
     pub(crate) persist: bool,
 }
 
-pub(crate) fn bundle_info() -> Option<plist::Dictionary> {
-    // <Name>.app/Contents/MacOS/<exe> -> <Name>.app/Contents/Info.plist
-    let exe = std::env::current_exe().ok()?;
-    let info = exe.parent()?.parent()?.join("Info.plist");
-    plist::Value::from_file(info).ok()?.into_dictionary()
-}
-
 pub(crate) fn which_app() -> App {
-    let info = bundle_info();
-    let plist_str = |k: &str| {
-        info.as_ref()
-            .and_then(|d| d.get(k))
-            .and_then(|v| v.as_string())
-            .map(str::to_owned)
-    };
-    if let Some(folder) = plist_str("OAAppFolder").filter(|s| !s.is_empty()) {
+    // An installed copy: its own identity (Info.plist, or openas-app.json
+    // beside the program on Windows).
+    if let Some(who) = openas_platform::own_identity() {
         return App {
-            folder: PathBuf::from(folder),
-            name: plist_str("CFBundleName").unwrap_or_else(|| "App".into()),
-            id: plist_str("CFBundleIdentifier").filter(|i| i != RUNNER_ID),
+            folder: who.folder,
+            name: who.name,
+            id: Some(who.id).filter(|i| !i.is_empty() && i != RUNNER_ID),
             check: None,
-            helper: plist_str("OAHelper").map(PathBuf::from),
-            manager: info
-                .as_ref()
-                .and_then(|d| d.get("OAManager"))
-                .and_then(|v| v.as_boolean())
-                .unwrap_or(false),
+            helper: who.helper,
+            manager: who.manager,
             making: false,
-            env: [
-                ("OARoot", "OPENAS_ROOT"),
-                ("OAInstallDir", "OPENAS_INSTALL_DIR"),
-                ("OAIdPrefix", "OPENAS_ID_PREFIX"),
-            ]
-            .iter()
-            .filter_map(|(k, var)| plist_str(k).map(|v| (var.to_string(), v)))
-            .collect(),
+            env: who.env,
         };
     }
     let args: Vec<String> = std::env::args().collect();
@@ -114,21 +91,6 @@ pub(crate) fn which_app() -> App {
         making,
         env: vec![],
     }
-}
-
-/// The Helper's socket: in the data folder, unless that path is too long
-/// for a Unix socket (about 104 bytes on a Mac); then a short one in the
-/// temp folder, named after the data folder so setups never share one.
-pub(crate) fn socket_for(root: &std::path::Path) -> PathBuf {
-    let p = root.join("helper.sock");
-    if p.as_os_str().len() < 100 {
-        return p;
-    }
-    let mut h: u64 = 0xcbf29ce484222325;
-    for b in root.to_string_lossy().bytes() {
-        h = (h ^ b as u64).wrapping_mul(0x100000001b3);
-    }
-    std::env::temp_dir().join(format!("openas-{h:016x}.sock"))
 }
 
 pub(crate) fn root(me: &App) -> PathBuf {

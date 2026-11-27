@@ -17,13 +17,14 @@
 //! malware running as the same user, which could read the key file directly.
 
 use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, bail, Context, Result};
-use openas_core::{install, make, model, paths};
+use openas_core::{make, model, paths};
+use openas_platform::ipc::{Conn, Listener};
 use serde_json::{json, Value};
 
 const IDLE_EXIT: Duration = Duration::from_secs(600);
@@ -42,66 +43,6 @@ fn now() -> u64 {
         .unwrap_or(0)
 }
 
-#[cfg(target_os = "macos")]
-fn peer_pid(s: &std::os::unix::net::UnixStream) -> Option<i32> {
-    use std::os::fd::AsRawFd;
-    let mut pid: libc::pid_t = 0;
-    let mut len = std::mem::size_of::<libc::pid_t>() as libc::socklen_t;
-    // SAFETY: `pid` and `len` are live locals of the size we pass; the
-    // kernel writes at most `len` bytes into `pid`. LOCAL_PEERPID asks a
-    // Unix socket for the process on its other end (sys/un.h).
-    let r = unsafe {
-        libc::getsockopt(
-            s.as_raw_fd(),
-            libc::SOL_LOCAL,
-            libc::LOCAL_PEERPID,
-            &mut pid as *mut _ as *mut libc::c_void,
-            &mut len,
-        )
-    };
-    (r == 0 && pid > 0).then_some(pid)
-}
-
-#[cfg(target_os = "macos")]
-fn pid_exe(pid: i32) -> Option<PathBuf> {
-    let mut buf = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
-    // SAFETY: `buf` is a live buffer of the length we pass; proc_pidpath
-    // writes at most that many bytes and returns how many it wrote.
-    let n =
-        unsafe { libc::proc_pidpath(pid, buf.as_mut_ptr() as *mut libc::c_void, buf.len() as u32) };
-    (n > 0).then(|| PathBuf::from(String::from_utf8_lossy(&buf[..n as usize]).into_owned()))
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn peer_pid(s: &std::os::unix::net::UnixStream) -> Option<i32> {
-    use std::os::fd::AsRawFd;
-    // SAFETY: ucred is plain integers, so all zeroes is a valid value.
-    let mut cred: libc::ucred = unsafe { std::mem::zeroed() };
-    let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
-    // SAFETY: `cred` and `len` are live locals of the size we pass.
-    let r = unsafe {
-        libc::getsockopt(
-            s.as_raw_fd(),
-            libc::SOL_SOCKET,
-            libc::SO_PEERCRED,
-            &mut cred as *mut _ as *mut libc::c_void,
-            &mut len,
-        )
-    };
-    (r == 0).then_some(cred.pid)
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn pid_exe(pid: i32) -> Option<PathBuf> {
-    std::fs::read_link(format!("/proc/{pid}/exe")).ok()
-}
-
-/// `<X>.app/Contents/MacOS/<exe>` -> `<X>.app`
-fn bundle_of(exe: &Path) -> Option<PathBuf> {
-    let b = exe.parent()?.parent()?.parent()?;
-    (b.extension()? == "app").then(|| b.to_path_buf())
-}
-
 fn same(a: &Path, b: &Path) -> bool {
     a.canonicalize()
         .ok()
@@ -110,27 +51,22 @@ fn same(a: &Path, b: &Path) -> bool {
 }
 
 fn trusted_copy(bundle: &Path, recorded: Option<&str>) -> bool {
-    let Some(want) = recorded else { return false };
-    let verified = std::process::Command::new("codesign")
-        .arg("--verify")
-        .arg(bundle)
-        .output()
-        .is_ok_and(|o| o.status.success());
-    verified && install::cdhash(bundle).as_deref() == Some(want)
+    recorded.is_some_and(|want| openas_platform::sealed(bundle, want))
 }
 
 pub fn manager_record() -> Option<Value> {
     serde_json::from_str(&std::fs::read_to_string(paths::root().join("manager.json")).ok()?).ok()
 }
 
-fn identify(s: &std::os::unix::net::UnixStream) -> Result<Caller> {
-    let pid = peer_pid(s).ok_or_else(|| anyhow!("can't see who is calling"))?;
-    let exe = pid_exe(pid).ok_or_else(|| anyhow!("can't see the caller's program"))?;
+fn identify(conn: &Conn) -> Result<Caller> {
+    let exe = conn
+        .peer_exe()
+        .ok_or_else(|| anyhow!("can't see who is calling"))?;
     if same(&exe, &std::env::current_exe()?) {
         return Ok(Caller::Owner);
     }
-    let bundle =
-        bundle_of(&exe).ok_or_else(|| anyhow!("{} is not an OpenAs app", exe.display()))?;
+    let bundle = openas_platform::bundle_of(&exe)
+        .ok_or_else(|| anyhow!("{} is not an OpenAs app", exe.display()))?;
     if let Some(m) = manager_record() {
         if m.get("installed")
             .and_then(Value::as_str)
@@ -365,7 +301,7 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
             let folder = make::find(&app)?;
             let info = make::read_info(&folder)?;
             let path = info.installed.ok_or_else(|| anyhow!("not installed"))?;
-            std::process::Command::new("open").arg(path).status()?;
+            openas_platform::launch(&path, false)?;
             Ok(json!({ "opened": true }))
         }
         Request::Settings => {
@@ -400,9 +336,7 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
             let r = openas_core::share::open(std::path::Path::new(&file))?;
             let info = openas_core::share::install(&r, &name)?;
             if let Some(app) = &info.installed {
-                let _ = std::process::Command::new("/usr/bin/open")
-                    .arg(app)
-                    .status();
+                let _ = openas_platform::launch(app, false);
             }
             Ok(json!({ "id": info.id, "name": info.name }))
         }
@@ -495,39 +429,32 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
 }
 
 pub fn serve() -> Result<()> {
-    use std::os::unix::net::{UnixListener, UnixStream};
-    let sock = paths::socket();
-    std::fs::create_dir_all(paths::root())?;
-    if sock.exists() {
-        if UnixStream::connect(&sock).is_ok() {
-            bail!("a Helper is already running");
-        }
-        std::fs::remove_file(&sock)?;
-    }
-    let listener = UnixListener::bind(&sock).context("opening the Helper socket")?;
+    let listener = Arc::new(match Listener::bind(&paths::root()) {
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => bail!("a Helper is already running"),
+        r => r.context("opening the Helper's socket")?,
+    });
     make::sweep_drafts();
-    // Only this user can connect.
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&sock, std::fs::Permissions::from_mode(0o600))?;
 
     let last = Arc::new(AtomicU64::new(now()));
     let busy = Arc::new(AtomicUsize::new(0));
     // One change at a time per app.
     let locks: Arc<Mutex<std::collections::HashSet<String>>> = Arc::default();
     {
-        let (last, busy, sock) = (last.clone(), busy.clone(), sock.clone());
+        let (last, busy, listener) = (last.clone(), busy.clone(), listener.clone());
         std::thread::spawn(move || loop {
             std::thread::sleep(Duration::from_secs(15));
             if busy.load(Ordering::SeqCst) == 0
                 && now() - last.load(Ordering::SeqCst) > IDLE_EXIT.as_secs()
             {
-                let _ = std::fs::remove_file(&sock);
+                listener.close();
                 std::process::exit(0);
             }
         });
     }
-    for stream in listener.incoming() {
-        let Ok(stream) = stream else { continue };
+    loop {
+        let Ok(stream) = listener.accept() else {
+            continue;
+        };
         last.store(now(), Ordering::SeqCst);
         let (last, busy, locks) = (last.clone(), busy.clone(), locks.clone());
         std::thread::spawn(move || {
@@ -596,7 +523,6 @@ pub fn serve() -> Result<()> {
             busy.fetch_sub(1, Ordering::SeqCst);
         });
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -654,14 +580,5 @@ mod tests {
         assert_eq!(b64(b"fo"), "Zm8=");
         assert_eq!(b64(b"foo"), "Zm9v");
         assert_eq!(b64(b"foobar"), "Zm9vYmFy");
-    }
-
-    #[test]
-    fn bundle_of_finds_the_app() {
-        assert_eq!(
-            bundle_of(Path::new("/A/Plants.app/Contents/MacOS/Plants")),
-            Some(PathBuf::from("/A/Plants.app"))
-        );
-        assert_eq!(bundle_of(Path::new("/usr/bin/python3")), None);
     }
 }

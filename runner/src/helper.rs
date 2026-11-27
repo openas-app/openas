@@ -9,8 +9,7 @@ pub(crate) struct Job {
     pub(crate) thought: Option<String>,
     pub(crate) done: Option<Value>,
     /// The connection, so Stop can cut it (the Helper then stops the model).
-    #[cfg(unix)]
-    pub(crate) conn: Option<std::os::unix::net::UnixStream>,
+    pub(crate) conn: Option<openas_platform::ipc::Stopper>,
 }
 
 /// Shared app files opened with OpenAs (Finder, a double-click), waiting
@@ -45,16 +44,15 @@ pub(crate) struct Jobs {
 
 // ---- The Helper, for the change sheet and the manager -----------------------
 
-#[cfg(unix)]
 pub(crate) fn helper_request(
     me: &App,
     req: &Value,
     job: &Arc<Mutex<Job>>,
 ) -> Result<Value, String> {
+    use openas_platform::ipc;
     use std::io::{BufRead, BufReader, Write};
-    use std::os::unix::net::UnixStream;
-    let sock = socket_for(&root(me));
-    let connect = || UnixStream::connect(&sock);
+    let root = root(me);
+    let connect = || ipc::connect(&root);
     let stream = match connect() {
         Ok(s) => s,
         Err(_) => {
@@ -62,7 +60,7 @@ pub(crate) fn helper_request(
                 .helper
                 .clone()
                 .ok_or("this app doesn't know where OpenAs is")?;
-            std::process::Command::new(&helper)
+            openas_platform::proc::background(&mut std::process::Command::new(&helper))
                 .arg("serve")
                 .envs(me.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
                 .stdin(std::process::Stdio::null())
@@ -86,7 +84,7 @@ pub(crate) fn helper_request(
     writeln!(&stream, "{req}").map_err(|e| e.to_string())?;
     job.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .conn = stream.try_clone().ok();
+        .conn = stream.stopper();
     for line in BufReader::new(&stream).lines() {
         let Ok(line) = line else { break };
         let v: Value = serde_json::from_str(&line).map_err(|e| e.to_string())?;
@@ -121,15 +119,6 @@ pub(crate) fn helper_request(
             "OpenAs stopped answering".into()
         },
     )
-}
-
-#[cfg(not(unix))]
-pub(crate) fn helper_request(
-    _me: &App,
-    _req: &Value,
-    _job: &Arc<Mutex<Job>>,
-) -> Result<Value, String> {
-    Err("changing apps from their menu isn't on this system yet".into())
 }
 
 /// What a window may ask the Helper. The change sheet: change only this app.
@@ -249,14 +238,13 @@ pub fn helper_stop(
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(&job)
     {
-        #[cfg(unix)]
         if let Some(c) = j
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .conn
             .take()
         {
-            let _ = c.shutdown(std::net::Shutdown::Both);
+            c.stop();
         }
     }
     Ok(())

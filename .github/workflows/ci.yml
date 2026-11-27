@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, windows]
   pull_request:
 
 jobs:
@@ -20,5 +20,29 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
-      - name: Simulated desktop compiles
-        run: swiftc -O tools/snap.swift -o target/snap
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace --no-fail-fast
+      - name: Build release
+        run: cargo build --release
+      - name: Smoke - install, load check, screenshot, share
+        shell: pwsh
+        run: |
+          ./runner/scripts/bundle_windows.ps1
+          ./tools/smoke/windows.ps1
+      - name: Keep the screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke
+          path: target/smoke/

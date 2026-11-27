@@ -282,10 +282,7 @@ fn keep_or_discard(ws: &Path, made_name: &str) -> Result<()> {
     if !app.as_os_str().is_empty() {
         // A test run never brings a window in front of the person.
         let quiet = std::env::var("OPENAS_QUIET_WINDOW").is_ok();
-        let _ = Command::new("/usr/bin/open")
-            .args(if quiet { &["-g"][..] } else { &[][..] })
-            .arg(&app)
-            .status();
+        let _ = openas_platform::launch(&app, quiet);
     }
     Ok(())
 }
@@ -318,45 +315,8 @@ pub(super) fn making_window(ws: &Path) -> PathBuf {
         ".window-{}",
         ws.file_name().unwrap_or_default().to_string_lossy()
     ));
-    let app = dir.join("New app.app");
-    let ok = (|| -> Result<()> {
-        std::fs::create_dir_all(&dir)?;
-        let st = Command::new("/usr/bin/ditto")
-            .arg(paths::runner_bundle())
-            .arg(&app)
-            .status()?;
-        if !st.success() {
-            bail!("ditto");
-        }
-        let plist = app.join("Contents/Info.plist");
-        for cmd in [
-            "Set :CFBundleName New app",
-            "Set :CFBundleIdentifier app.openas.making",
-        ] {
-            let _ = Command::new("/usr/libexec/PlistBuddy")
-                .args(["-c", cmd])
-                .arg(&plist)
-                .status();
-        }
-        let _ = Command::new("/usr/libexec/PlistBuddy")
-            .args(["-c", "Add :CFBundleDisplayName string New app"])
-            .arg(&plist)
-            .stderr(std::process::Stdio::null())
-            .status();
-        let st = Command::new("/usr/bin/codesign")
-            .args(["--force", "--sign", "-"])
-            .arg(&app)
-            .stderr(std::process::Stdio::null())
-            .status()?;
-        if !st.success() {
-            bail!("codesign");
-        }
-        Ok(())
-    })();
-    match ok {
-        Ok(()) => app.join("Contents/MacOS/Runner"),
-        Err(_) => paths::runner_exe(),
-    }
+    openas_platform::making_copy(&paths::runner_bundle(), &dir)
+        .unwrap_or_else(|_| paths::runner_exe())
 }
 
 /// The lock a running build holds in its draft folder (runner/src/who.rs
@@ -370,7 +330,7 @@ const BUILD_LOCK: &str = "build.lock";
 pub fn start_make(request: &str, openas: &Path, window: bool) -> Result<PathBuf> {
     let ws = prepare_draft(request)?;
     let log = std::fs::File::create(ws.join("make.log"))?;
-    Command::new(openas)
+    openas_platform::proc::background(&mut Command::new(openas))
         .arg("make-run")
         .arg(&ws)
         .stdin(std::process::Stdio::null())

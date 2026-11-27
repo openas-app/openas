@@ -168,6 +168,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn refuses_symlink_escapes() {
         let d = tmp("links");
         let r = d.join("root");
@@ -217,6 +218,28 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
+    fn runs_a_program_with_a_time_limit_on_windows() {
+        let tmp = std::env::temp_dir();
+        let cmd = |line: &str, input: Option<String>, ms: u64| {
+            run_program("cmd", &["/c".into(), line.into()], &tmp, input, ms).unwrap()
+        };
+        let r = cmd("echo hello", None, 5000);
+        assert_eq!(r["code"], 0);
+        assert_eq!(r["stdout"], "hello\r\n");
+        let r = cmd("findstr x*", Some("piped".into()), 5000);
+        assert_eq!(r["stdout"].as_str().unwrap().trim(), "piped");
+        // Through a shell: what it started stops too (the Job Object), promptly.
+        let t = std::time::Instant::now();
+        let r = cmd("ping -n 6 127.0.0.1 >nul & echo x", None, 300);
+        assert_eq!(r["timedOut"], true);
+        assert!(t.elapsed().as_millis() < 2000, "took {:?}", t.elapsed());
+        assert!(!r["stdout"].as_str().unwrap().contains('x'));
+        assert!(run_program("no-such-program-xyz", &[], &tmp, None, 1000).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn runs_a_program_with_a_time_limit() {
         let tmp = std::env::temp_dir();
         let r = run_program("echo", &["hello".into()], &tmp, None, 5000).unwrap();
@@ -270,6 +293,27 @@ mod tests {
     }
 
     #[test]
+    #[cfg(windows)]
+    fn wide_folders_are_refused_on_windows() {
+        let home = dirs::home_dir().unwrap();
+        let app = home.join(r"AppData\Roaming\OpenAs\apps\x");
+        assert!(too_wide(Path::new(r"C:\"), &app));
+        assert!(too_wide(Path::new(r"D:\"), &app));
+        assert!(too_wide(home.parent().unwrap(), &app));
+        assert!(too_wide(&home, &app));
+        assert!(too_wide(&home.join("AppData"), &app));
+        assert!(too_wide(
+            &home.join(r"AppData\Local\Programs\OpenAs\Tea Timer"),
+            &app
+        ));
+        assert!(too_wide(Path::new(r"C:\Windows\System32"), &app));
+        assert!(too_wide(Path::new(r"C:\Program Files\Something"), &app));
+        assert!(!too_wide(&home.join("Downloads"), &app));
+        assert!(!too_wide(&home.join(r"Documents\Invoices"), &app));
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn wide_folders_are_refused() {
         let home = dirs::home_dir().unwrap();
         let app = home.join("Library/Application Support/OpenAs/apps/x");

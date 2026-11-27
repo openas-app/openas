@@ -182,7 +182,7 @@ pub fn data_shape(folder: &Path) -> Option<String> {
 /// one app never replaces another. An app's own earlier copy doesn't count.
 fn free_name(name: &str, folder: &Path) -> String {
     let taken = |n: &str| {
-        let app = paths::install_dir().join(format!("{n}.app"));
+        let app = openas_platform::install_path(&paths::install_dir(), n);
         app.exists() && !install::owned_by(&app, folder)
     };
     let name = &install::clean_name(name);
@@ -276,11 +276,9 @@ pub fn rename(app: &str, name: &str) -> Result<AppInfo> {
         .unwrap_or_else(|_| install::fallback_icon(&info.id));
     let path = install::install(&folder, &info.id, name, &svg)?;
     if let Some(old) = info.installed.take().filter(|o| {
-        *o != path
-            && o.extension().is_some_and(|e| e == "app")
-            && o.starts_with(paths::install_dir())
+        *o != path && openas_platform::is_install(o) && o.starts_with(paths::install_dir())
     }) {
-        let _ = std::fs::remove_dir_all(old);
+        openas_platform::remove_install(&old);
     }
     info.name = name.into();
     info.cdhash = install::cdhash(&path);
@@ -927,15 +925,29 @@ mod tests {
     fn a_new_app_never_takes_another_apps_name() {
         let dir = std::env::temp_dir().join(format!("oa-names-{}", std::process::id()));
         let apps = dir.join("Applications");
-        std::fs::create_dir_all(apps.join("Habits.app/Contents")).unwrap();
-        let mut d = plist::Dictionary::new();
-        d.insert(
-            "OAAppFolder".into(),
-            plist::Value::String("/x/apps/habits".into()),
-        );
-        plist::Value::Dictionary(d)
-            .to_file_xml(apps.join("Habits.app/Contents/Info.plist"))
+        // An installed copy of "Habits" that belongs to /x/apps/habits.
+        let habits = openas_platform::install_path(&apps, "Habits");
+        #[cfg(target_os = "macos")]
+        {
+            std::fs::create_dir_all(habits.join("Contents")).unwrap();
+            let mut d = plist::Dictionary::new();
+            d.insert(
+                "OAAppFolder".into(),
+                plist::Value::String("/x/apps/habits".into()),
+            );
+            plist::Value::Dictionary(d)
+                .to_file_xml(habits.join("Contents/Info.plist"))
+                .unwrap();
+        }
+        #[cfg(windows)]
+        {
+            std::fs::create_dir_all(&habits).unwrap();
+            std::fs::write(
+                habits.join("openas-app.json"),
+                r#"{"folder":"/x/apps/habits","name":"Habits","id":"app.openas.habits"}"#,
+            )
             .unwrap();
+        }
         std::env::set_var("OPENAS_INSTALL_DIR", &apps);
         assert_eq!(free_name("Habits", Path::new("/x/apps/other")), "Habits 2");
         assert_eq!(free_name("Habits", Path::new("/x/apps/habits")), "Habits"); // its own copy
