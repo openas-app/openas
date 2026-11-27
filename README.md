@@ -24,7 +24,7 @@ You need Rust ([rustup.rs](https://rustup.rs)) and Apple's command line tools
 
     git clone https://github.com/openas-app/openas && cd openas && ./install.sh
 
-The first build takes a few minutes. OpenAs then opens from `~/Applications`.
+The first build takes a few minutes. Openas then opens from `~/Applications`.
 
 ## First app
 
@@ -32,7 +32,7 @@ The first build takes a few minutes. OpenAs then opens from `~/Applications`.
    Spanish".
 2. **Choose who builds it** (the first time only). Pick Claude, an open model or a
    model on this Mac, paste a key if it needs one, and see the price of an app with
-   that model. OpenAs tries the key with one tiny request before saving it in your
+   that model. Openas tries the key with one tiny request before saving it in your
    Keychain.
 3. **Watch it being made.** A window opens with the app on the left and the build on
    the right: the plan, each part, and the model trying its own work. You can add
@@ -53,7 +53,7 @@ What an app costs, measured on real builds:
 | A model on your Mac | free |
 
 These are rough: prices change, and the same app can take more or fewer steps.
-OpenAs shows what each app actually cost when it's done. A change costs about
+Openas shows what each app actually cost when it's done. A change costs about
 the same as a new app.
 
 Building stops at two limits you set under **Spending** (click the model name
