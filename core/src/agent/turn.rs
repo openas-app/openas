@@ -190,7 +190,7 @@ pub(super) fn run_live(
             "thinking": { "type": "adaptive", "display": "summarized" },
             "output_config": { "effort": "high" },
             "cache_control": { "type": "ephemeral" },
-            "system": [{ "type": "text", "text": BUILDER, "cache_control": { "type": "ephemeral" } }],
+            "system": [{ "type": "text", "text": builder_prompt(), "cache_control": { "type": "ephemeral" } }],
             "tools": tools,
             "messages": messages,
         });

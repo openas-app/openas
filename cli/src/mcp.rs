@@ -54,7 +54,7 @@ fn call(name: &str, a: &Value) -> Result<String> {
                 return Ok(format!("Not installed. Fix these and call create_app again:\n- {}", o.problems.join("\n- ")));
             }
             if let Some(p) = &o.info.installed {
-                let _ = std::process::Command::new("open").arg(p).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+                let _ = openas_platform::launch(p, false);
             }
             format!("Installed \"{}\" (id {}) and opened it.", o.info.name, o.info.id)
         }
@@ -83,7 +83,7 @@ fn call(name: &str, a: &Value) -> Result<String> {
         "open_app" => {
             let info = make::read_info(&make::find(s("app")?)?)?;
             let p = info.installed.ok_or_else(|| anyhow!("not installed"))?;
-            std::process::Command::new("open").arg(p).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status()?;
+            openas_platform::launch(&p, false)?;
             format!("Opened \"{}\".", info.name)
         }
         _ => return Err(anyhow!("unknown tool {name}")),

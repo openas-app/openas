@@ -299,6 +299,10 @@ pub fn launch(install: &Path, _quiet: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn open_url(url: &str) {
+    let _ = Command::new("explorer").arg(url).spawn();
+}
+
 pub fn reveal(path: &Path) {
     let _ = Command::new("explorer")
         .arg(format!("/select,{}", path.display()))

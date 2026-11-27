@@ -141,6 +141,12 @@ pub fn launch(install: &Path, quiet: bool) -> anyhow::Result<()> {
     os::launch(install, quiet)
 }
 
+/// Opens a web page (http or https only; the caller checks) in the
+/// person's browser.
+pub fn open_url(url: &str) {
+    os::open_url(url)
+}
+
 /// Shows a file in the Finder / Explorer.
 pub fn reveal(path: &Path) {
     os::reveal(path)

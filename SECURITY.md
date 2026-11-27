@@ -59,8 +59,17 @@ calling process's id, its program and that program's bundle, and answers only:
 - an app it installed, checked the same way, and only about that app (change,
   undo, versions and restore).
 
+On Windows the Helper listens on a named pipe whose access list admits only your
+user, refuses connections from other computers, and is created so a second
+program can't take its name. It names the caller by the program file of the
+process on the other end. Every copy of the Runner is the same program there,
+so an installed app is recognised by its folder, and checked by a SHA-256 of
+every file in that folder taken at install: a changed program, a changed
+identity file or a library dropped beside the program all make it a stranger.
+
 `cli/tests/helper_refuses.rs` starts a real Helper and checks that a stranger
-and a modified copy of an app are refused.
+and a modified copy of an app are refused, and that an intact copy is answered.
+It runs on both systems.
 
 This keeps apps from acting on each other. It is not protection from malware
 already running as your user, which could do anything you can.
@@ -72,6 +81,9 @@ chose. Nothing goes to a server of ours; there isn't one. OpenAs stores keys
 through Apple's `security` tool, so any program running as you, including an
 app you gave full access, can read them without a prompt. While a key is being
 saved it is briefly visible in the process list.
+
+On Windows keys are kept in Credential Manager, one item per provider, which
+likewise any program running as you can read.
 
 What goes to the model provider: your description, the app's code, and, while
 building or changing, screenshots and test results of the app running in a

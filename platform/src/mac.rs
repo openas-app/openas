@@ -278,6 +278,10 @@ pub fn launch(app: &Path, quiet: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn open_url(url: &str) {
+    let _ = Command::new("/usr/bin/open").arg(url).spawn();
+}
+
 pub fn reveal(path: &Path) {
     let _ = Command::new("/usr/bin/open").arg("-R").arg(path).status();
 }

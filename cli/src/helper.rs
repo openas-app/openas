@@ -301,7 +301,7 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
             let folder = make::find(&app)?;
             let info = make::read_info(&folder)?;
             let path = info.installed.ok_or_else(|| anyhow!("not installed"))?;
-            std::process::Command::new("open").arg(path).status()?;
+            openas_platform::launch(&path, false)?;
             Ok(json!({ "opened": true }))
         }
         Request::Settings => {
@@ -336,9 +336,7 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
             let r = openas_core::share::open(std::path::Path::new(&file))?;
             let info = openas_core::share::install(&r, &name)?;
             if let Some(app) = &info.installed {
-                let _ = std::process::Command::new("/usr/bin/open")
-                    .arg(app)
-                    .status();
+                let _ = openas_platform::launch(app, false);
             }
             Ok(json!({ "id": info.id, "name": info.name }))
         }

@@ -280,7 +280,7 @@ fn main() {
                     // A web link opens in the browser only if this app may use
                     // the internet: otherwise a page could send data out in a URL.
                     if web && !quiet && online(&net_nav) {
-                        let _ = std::process::Command::new(if cfg!(windows) { "explorer" } else { "open" }).arg(u.as_str()).spawn();
+                        openas_platform::open_url(u.as_str());
                     }
                     // The window stays on the app: web pages open in the browser,
                     // and other schemes (file:, ssh:, …) go nowhere.
@@ -290,7 +290,7 @@ fn main() {
                 .on_new_window(move |u, _| {
                     // Only web pages go to the browser; never file:, ssh:, other apps' schemes.
                     if matches!(u.scheme(), "http" | "https") && !quiet && (own_links || online(&net_win)) {
-                        let _ = std::process::Command::new(if cfg!(windows) { "explorer" } else { "open" }).arg(u.as_str()).spawn();
+                        openas_platform::open_url(u.as_str());
                     }
                     NewWindowResponse::Deny
                 })

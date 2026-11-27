@@ -95,9 +95,25 @@ pub fn menubar_set(
     } else {
         // Text only, like other menu bar items (the app's colour icon would
         // look out of place up there; a symbol can go in the title).
-        let t = TrayIconBuilder::with_id("app")
+        #[allow(unused_mut)]
+        let mut b = TrayIconBuilder::with_id("app");
+        // Windows' tray shows an icon, never text: the app's own icon, with
+        // the title in its tooltip.
+        #[cfg(windows)]
+        {
+            if let Ok(img) = tauri::image::Image::from_path(me.folder.join("icon.png")) {
+                b = b.icon(img);
+            } else if let Some(i) = app.default_window_icon() {
+                b = b.icon(i.clone());
+            }
+        }
+        let t = b
             .title(&title)
-            .tooltip(&tip)
+            .tooltip(if cfg!(windows) && !title.is_empty() {
+                &title
+            } else {
+                &tip
+            })
             .menu(&menu)
             .show_menu_on_left_click(true)
             .on_tray_icon_event(|t, e| {
