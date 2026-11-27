@@ -165,7 +165,11 @@ pub(crate) fn serve_dir(dir: &Path, rel: &str, csp: &str) -> Reply {
     let rel = if rel.is_empty() { "index.html" } else { rel };
     let path = dir.join(rel);
     if rel == "index.html" && !path.exists() {
-        return respond(WAITING_PAGE.as_bytes().to_vec(), "text/html", &policy(false));
+        return respond(
+            WAITING_PAGE.as_bytes().to_vec(),
+            "text/html",
+            &policy(false),
+        );
     }
     let inside = path
         .canonicalize()

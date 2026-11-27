@@ -91,8 +91,11 @@ pub fn talk_choose(
         // A build that stopped or failed has no process waiting for the
         // choice: throw the draft away here.
         if build_ended(&me.folder) {
-            std::fs::write(me.folder.with_extension("moved"), json!({ "discarded": true }).to_string())
-                .map_err(|e| e.to_string())?;
+            std::fs::write(
+                me.folder.with_extension("moved"),
+                json!({ "discarded": true }).to_string(),
+            )
+            .map_err(|e| e.to_string())?;
             let _ = std::fs::remove_dir_all(&me.folder);
             return Ok(());
         }
@@ -107,7 +110,10 @@ pub fn talk_choose(
 
 /// The draft's build stopped or failed, so no process is working on it.
 fn build_ended(folder: &Path) -> bool {
-    matches!(read_json(&folder.join("making.json"))["phase"].as_str(), Some("stopped" | "failed"))
+    matches!(
+        read_json(&folder.join("making.json"))["phase"].as_str(),
+        Some("stopped" | "failed")
+    )
 }
 
 /// Carries on with a draft whose build stopped or failed: the build starts
@@ -120,7 +126,10 @@ pub fn talk_continue(text: String, webview: tauri::Webview, who: State<Who>) -> 
     if !me.making || !build_ended(&me.folder) {
         return Err("not allowed".into());
     }
-    let helper = me.helper.clone().ok_or("this window doesn't know where OpenAs is")?;
+    let helper = me
+        .helper
+        .clone()
+        .ok_or("this window doesn't know where OpenAs is")?;
     let first = std::fs::read_to_string(me.folder.join("prompt.txt")).unwrap_or_default();
     let note: String = text.trim().chars().take(2000).collect();
     let started = me.folder.join("app/index.html").exists();
@@ -130,9 +139,16 @@ pub fn talk_continue(text: String, webview: tauri::Webview, who: State<Who>) -> 
         (false, true) => first.trim().to_string(),
         (false, false) => format!("{}\n\n{note}", first.trim()),
     };
-    let shown = if note.is_empty() { "Continue".to_string() } else { note.clone() };
-    std::fs::write(me.folder.join("continue.json"), json!({ "request": request, "shown": shown }).to_string())
-        .map_err(|e| e.to_string())?;
+    let shown = if note.is_empty() {
+        "Continue".to_string()
+    } else {
+        note.clone()
+    };
+    std::fs::write(
+        me.folder.join("continue.json"),
+        json!({ "request": request, "shown": shown }).to_string(),
+    )
+    .map_err(|e| e.to_string())?;
     let _ = std::fs::remove_file(me.folder.join("stop"));
     std::process::Command::new(&helper)
         .arg("make-run")

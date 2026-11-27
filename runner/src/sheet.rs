@@ -10,30 +10,50 @@ use tauri::{AppHandle, Manager};
 /// the build window shows. The answer goes to the conversation page, which
 /// shows the progress and makes the choice.
 pub(crate) fn ask(app: &AppHandle, save: bool) {
-    let Some(talk) = app.get_webview("talk") else { return };
-    let Ok(me) = app.state::<Who>().me_by_label("talk") else { return };
+    let Some(talk) = app.get_webview("talk") else {
+        return;
+    };
+    let Ok(me) = app.state::<Who>().me_by_label("talk") else {
+        return;
+    };
     if !me.making {
         return;
     }
-    let name = read_json(&me.folder.join("making.json"))["name"].as_str().unwrap_or("").to_string();
+    let name = read_json(&me.folder.join("making.json"))["name"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
     // The dialog shows the app being saved, not OpenAs.
     let icon = me.folder.join("icon.svg");
     let icon = icon.exists().then(|| icon.to_string_lossy().into_owned());
-    let Ok(win) = talk.window().ns_window() else { return };
+    let Ok(win) = talk.window().ns_window() else {
+        return;
+    };
     let win = win as usize;
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
         let answer = move |name: Option<String>| {
-            let Some(t) = app2.get_webview("talk") else { return };
+            let Some(t) = app2.get_webview("talk") else {
+                return;
+            };
             let js = match name {
-                Some(n) => format!("window.__oaChose && window.__oaChose(true, {})", serde_json::Value::from(n)),
+                Some(n) => format!(
+                    "window.__oaChose && window.__oaChose(true, {})",
+                    serde_json::Value::from(n)
+                ),
                 None => "window.__oaChose && window.__oaChose(false, '')".into(),
             };
             let _ = t.eval(js);
         };
         #[cfg(target_os = "macos")]
         unsafe {
-            mac::sheet(win as *mut std::ffi::c_void, save, &name, icon.as_deref(), answer)
+            mac::sheet(
+                win as *mut std::ffi::c_void,
+                save,
+                &name,
+                icon.as_deref(),
+                answer,
+            )
         };
         #[cfg(not(target_os = "macos"))]
         let _ = (win, icon, answer);
@@ -85,7 +105,13 @@ mod mac {
     const FIRST_BUTTON: isize = 1000;
 
     /// `answer(Some(name))` for Save, `answer(None)` for Discard; nothing on Cancel.
-    pub(super) unsafe fn sheet(win: *mut c_void, save: bool, name: &str, icon: Option<&str>, answer: impl Fn(Option<String>) + 'static) {
+    pub(super) unsafe fn sheet(
+        win: *mut c_void,
+        save: bool,
+        name: &str,
+        icon: Option<&str>,
+        answer: impl Fn(Option<String>) + 'static,
+    ) {
         let win = win.cast::<AnyObject>();
         if win.is_null() {
             return;
@@ -122,7 +148,8 @@ mod mac {
         let _: *mut AnyObject = msg_send![alert, addButtonWithTitle: ns("Cancel")];
         let field: *mut AnyObject = if save {
             let f: *mut AnyObject = msg_send![class!(NSTextField), alloc];
-            let f: *mut AnyObject = msg_send![f, initWithFrame: Rect { x: 0.0, y: 0.0, w: 260.0, h: 24.0 }];
+            let f: *mut AnyObject =
+                msg_send![f, initWithFrame: Rect { x: 0.0, y: 0.0, w: 260.0, h: 24.0 }];
             let _: () = msg_send![f, setStringValue: ns(name)];
             let _: () = msg_send![f, setPlaceholderString: ns("Name")];
             let _: () = msg_send![alert, setAccessoryView: f];

@@ -70,7 +70,9 @@ impl Live {
             *e = json!({ "did": [], "files": [] });
         }
         for (k, v) in [("did", did), ("files", file)] {
-            let Some(v) = v.map(str::trim).filter(|v| !v.is_empty()) else { continue };
+            let Some(v) = v.map(str::trim).filter(|v| !v.is_empty()) else {
+                continue;
+            };
             if let Some(a) = e[k].as_array_mut() {
                 // Said once each, in the order they happened, and never a wall.
                 if !a.iter().any(|x| x == v) && a.len() < 12 {

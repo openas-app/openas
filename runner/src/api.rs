@@ -16,7 +16,12 @@ pub fn store_get(key: String, webview: tauri::Webview, who: State<Who>) -> Resul
 }
 
 #[tauri::command]
-pub fn store_set(key: String, value: Value, webview: tauri::Webview, who: State<Who>) -> Result<bool, String> {
+pub fn store_set(
+    key: String,
+    value: Value,
+    webview: tauri::Webview,
+    who: State<Who>,
+) -> Result<bool, String> {
     let store = who.store(&webview)?;
     let mut map = store
         .map
@@ -35,7 +40,12 @@ pub fn store_set(key: String, value: Value, webview: tauri::Webview, who: State<
 }
 
 #[tauri::command]
-pub fn notify(text: String, webview: tauri::Webview, app: AppHandle, who: State<Who>) -> Result<bool, String> {
+pub fn notify(
+    text: String,
+    webview: tauri::Webview,
+    app: AppHandle,
+    who: State<Who>,
+) -> Result<bool, String> {
     let me = who.me(&webview)?;
     if me.check.is_some() || me.making {
         return Ok(true);

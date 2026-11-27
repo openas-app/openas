@@ -45,7 +45,8 @@ impl Who {
     }
 
     fn set_shown(&self, d: Option<Draft>) {
-        self.code_open.store(false, std::sync::atomic::Ordering::Relaxed);
+        self.code_open
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         self.full.store(false, std::sync::atomic::Ordering::Relaxed);
         *self
             .shown
@@ -110,7 +111,11 @@ const BUILD_LOCK: &str = "build.lock";
 pub(crate) fn settle(ws: &Path) {
     let p = ws.join("making.json");
     let mut m = read_json(&p);
-    if !matches!(m["phase"].as_str(), Some("planning" | "building" | "checking")) || build_alive(ws, &m) {
+    if !matches!(
+        m["phase"].as_str(),
+        Some("planning" | "building" | "checking")
+    ) || build_alive(ws, &m)
+    {
         return;
     }
     m["phase"] = json!("stopped");
@@ -121,7 +126,10 @@ pub(crate) fn settle(ws: &Path) {
 }
 
 fn build_alive(ws: &Path, m: &Value) -> bool {
-    match std::fs::OpenOptions::new().write(true).open(ws.join(BUILD_LOCK)) {
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .open(ws.join(BUILD_LOCK))
+    {
         // Taking it would only work if nobody holds it; dropped at once.
         Ok(f) => matches!(f.try_lock(), Err(std::fs::TryLockError::WouldBlock)),
         // No lock yet: the build is still starting, or it's from before the
@@ -139,7 +147,11 @@ fn build_alive(ws: &Path, m: &Value) -> bool {
 /// The apps being made, newest first, for Home's shelf.
 pub(crate) fn drafts(home: &App) -> Vec<Value> {
     let mut out = vec![];
-    for e in std::fs::read_dir(apps_dir(home)).into_iter().flatten().flatten() {
+    for e in std::fs::read_dir(apps_dir(home))
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
         let id = e.file_name().to_string_lossy().into_owned();
         let p = e.path();
         if !draft_id_ok(&id) || !p.is_dir() || p.with_extension("moved").exists() {
@@ -200,7 +212,10 @@ pub(crate) fn show(app: &AppHandle, id: &str) -> Result<(), String> {
     };
     // OpenAs is here to choose Save as App or Discard for it; while OpenAs
     // runs, the build waits for that choice.
-    let _ = std::fs::write(folder.with_extension("open"), std::process::id().to_string());
+    let _ = std::fs::write(
+        folder.with_extension("open"),
+        std::process::id().to_string(),
+    );
     who.set_shown(Some(Draft {
         app: Arc::new(draft),
         store: Arc::new(load_store(&folder, true)),
@@ -218,8 +233,12 @@ pub(crate) fn show(app: &AppHandle, id: &str) -> Result<(), String> {
                 .initialization_script(oa_bridge("OpenAs"))
                 .on_navigation(|u| u.scheme() == "app" || u.host_str() == Some("app.localhost"))
                 .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny);
-            win.add_child(tb, tauri::LogicalPosition::new(0.0, 0.0), tauri::LogicalSize::new(1.0, 1.0))
-                .map_err(|e| e.to_string())?;
+            win.add_child(
+                tb,
+                tauri::LogicalPosition::new(0.0, 0.0),
+                tauri::LogicalSize::new(1.0, 1.0),
+            )
+            .map_err(|e| e.to_string())?;
         }
     }
     // A new page for each draft: nothing carries over from the last one.
@@ -236,7 +255,11 @@ pub(crate) fn show(app: &AppHandle, id: &str) -> Result<(), String> {
         .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
         .on_download(|_, _| false);
     let page = win
-        .add_child(ab, tauri::LogicalPosition::new(0.0, 0.0), tauri::LogicalSize::new(1.0, 1.0))
+        .add_child(
+            ab,
+            tauri::LogicalPosition::new(0.0, 0.0),
+            tauri::LogicalSize::new(1.0, 1.0),
+        )
         .map_err(|e| e.to_string())?;
     round_corners(&page, PANEL_R);
     make_room(&win);
@@ -270,7 +293,9 @@ pub(crate) fn go_home(app: &AppHandle, saved: Option<&str>) {
 /// The app and its conversation need more width than Home: grow the window
 /// to fit both, keeping it on screen.
 fn make_room(win: &tauri::Window) {
-    let (Ok(size), Ok(scale), Ok(pos)) = (win.inner_size(), win.scale_factor(), win.outer_position()) else {
+    let (Ok(size), Ok(scale), Ok(pos)) =
+        (win.inner_size(), win.scale_factor(), win.outer_position())
+    else {
         return;
     };
     let (w, h) = (size.width as f64 / scale, size.height as f64 / scale);
@@ -320,7 +345,8 @@ fn round_corners(w: &tauri::Webview, r: f64) {
         if !layer.is_null() {
             let _: () = msg_send![layer, setCornerRadius: r];
             // Mid grey at low strength: visible on a dark app and a light one.
-            let c: *mut AnyObject = msg_send![class!(NSColor), colorWithWhite: 0.5f64, alpha: 0.35f64];
+            let c: *mut AnyObject =
+                msg_send![class!(NSColor), colorWithWhite: 0.5f64, alpha: 0.35f64];
             let cg: *const CGColor = msg_send![c, CGColor];
             let _: () = msg_send![layer, setBorderColor: cg];
             let _: () = msg_send![layer, setBorderWidth: 1.0f64];
@@ -349,14 +375,23 @@ pub(crate) fn layout(app: &AppHandle) {
     let who = app.state::<Who>();
     let making = who.shown().is_some();
     let code = who.code_open.load(std::sync::atomic::Ordering::Relaxed);
-    let tw = if who.full.load(std::sync::atomic::Ordering::Relaxed) { 0.0 } else { TALK_W.min(w * 0.5) };
+    let tw = if who.full.load(std::sync::atomic::Ordering::Relaxed) {
+        0.0
+    } else {
+        TALK_W.min(w * 0.5)
+    };
     if let Some(m) = app.get_webview("main") {
         let _ = m.set_bounds(rect(0.0, 0.0, w, h));
         let _ = if making { m.hide() } else { m.show() };
     }
     if let Some(a) = app.get_webview("app") {
         let px = tw + PANEL_INSET;
-        let _ = a.set_bounds(rect(px, BAR_H, w - px - PANEL_INSET, h - BAR_H - PANEL_INSET));
+        let _ = a.set_bounds(rect(
+            px,
+            BAR_H,
+            w - px - PANEL_INSET,
+            h - BAR_H - PANEL_INSET,
+        ));
         let _ = if making && !code { a.show() } else { a.hide() };
     }
     if let Some(t) = app.get_webview("talk") {
@@ -395,19 +430,28 @@ pub(crate) fn watch(app: AppHandle, save: MenuItem<tauri::Wry>, discard: MenuIte
                 // Saved: the app opens on its own. Discarded: long enough to
                 // read so. Either way, back to Home.
                 let info = read_json(&moved);
-                let name = info["app"]
-                    .as_str()
-                    .and_then(|p| Path::new(p).file_stem().map(|s| s.to_string_lossy().into_owned()));
+                let name = info["app"].as_str().and_then(|p| {
+                    Path::new(p)
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                });
                 let discarded = info["discarded"] == true;
                 std::thread::sleep(Duration::from_millis(if discarded { 1800 } else { 900 }));
-                if app.state::<Who>().shown().is_some_and(|s| s.app.folder == folder) {
+                if app
+                    .state::<Who>()
+                    .shown()
+                    .is_some_and(|s| s.app.folder == folder)
+                {
                     go_home(&app, if discarded { None } else { name.as_deref() });
                 }
                 continue;
             }
             let m = read_json(&folder.join("making.json"));
             // The window carries the app's name as soon as the build gives it one.
-            let name = m["name"].as_str().filter(|n| !n.is_empty()).unwrap_or("New app");
+            let name = m["name"]
+                .as_str()
+                .filter(|n| !n.is_empty())
+                .unwrap_or("New app");
             if name != title {
                 title = name.to_string();
                 if let Some(w) = app.get_window("main") {
@@ -478,7 +522,8 @@ pub fn draft_code_view(open: bool, webview: tauri::Webview, app: AppHandle) -> R
     if webview.label() != "talk" || !who.home.manager {
         return Err("not allowed".into());
     }
-    who.code_open.store(open, std::sync::atomic::Ordering::Relaxed);
+    who.code_open
+        .store(open, std::sync::atomic::Ordering::Relaxed);
     layout(&app);
     Ok(())
 }
@@ -564,7 +609,15 @@ mod tests {
     #[test]
     fn draft_ids_are_only_draft_folders() {
         assert!(draft_id_ok(".draft-1795726158357196000"));
-        for bad in ["", ".draft-", "../x", ".draft-1/../../etc", "Darkroom", ".draft-12a", ".draft-1 "] {
+        for bad in [
+            "",
+            ".draft-",
+            "../x",
+            ".draft-1/../../etc",
+            "Darkroom",
+            ".draft-12a",
+            ".draft-1 ",
+        ] {
             assert!(!draft_id_ok(bad), "{bad}");
         }
     }
@@ -584,7 +637,12 @@ mod tests {
             ("powers/mod.rs", include_str!("powers/mod.rs")),
         ];
         for (name, src) in sources {
-            for bad in ["State<App>", "State<Store>", "state::<App>()", "state::<Store>()"] {
+            for bad in [
+                "State<App>",
+                "State<Store>",
+                "state::<App>()",
+                "state::<Store>()",
+            ] {
                 assert!(!src.contains(bad), "{name} uses {bad}: go through Who");
             }
         }
