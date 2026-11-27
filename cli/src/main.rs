@@ -74,6 +74,7 @@ summary: {}", f.summary);
         }
         // Share an app as one file (code and icon, never data), or install one.
         ["share", app] => println!("{}", openas_core::share::export(&make::find(app)?, None)?.display()),
+        ["share", app, dir] => println!("{}", openas_core::share::export(&make::find(app)?, Some(std::path::Path::new(dir)))?.display()),
         ["import", file] => {
             let r = openas_core::share::open(std::path::Path::new(file))?;
             let info = openas_core::share::install(&r, &r.name.clone())?;

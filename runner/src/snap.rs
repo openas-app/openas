@@ -173,7 +173,8 @@ fn drive(
     out: PathBuf,
 ) {
     let start = Instant::now();
-    let limit = Duration::from_secs(40);
+    // WebView2's first start on a fresh PC can take over 20 s.
+    let limit = Duration::from_secs(if cfg!(windows) { 70 } else { 40 });
     let lock = || {
         seen.lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)

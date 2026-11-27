@@ -19,7 +19,7 @@ function Check($cond, $what) { if (-not $cond) { throw "FAILED: $what" } else { 
 
 function LoadCheck($folder, $name) {
   $p = Start-Process $runner -ArgumentList "--check", $folder, "--report", "$out\$name.json" -PassThru -RedirectStandardError "$out\$name.err.txt" -RedirectStandardOutput "$out\$name.out.txt"
-  Check ($p.WaitForExit(60000)) "load check finished ($name)"
+  Check ($p.WaitForExit(90000)) "load check finished ($name)"
   $r = Get-Content "$out\$name.json" -Raw
   Write-Host $r
   Get-Content "$out\$name.err.txt" -ErrorAction SilentlyContinue | Select-Object -Last 20 | ForEach-Object { Write-Host "  stderr: $_" }
@@ -71,7 +71,7 @@ $running | Stop-Process -Force -ErrorAction SilentlyContinue
 # The builder's eyes: a click, a notification, the screenshot.
 Set-Content "$T\s.js" "await ui.click('#b'); await app.permissions.request(['notifications']); await app.notify('hi'); return document.getElementById('n').textContent;"
 $p = Start-Process $runner -ArgumentList "--snap", "$T\root\apps\hello\app", "$out\shot.png", "900", "600", "$T\s.js", "light" -PassThru
-Check ($p.WaitForExit(90000)) "snap finished"
+Check ($p.WaitForExit(120000)) "snap finished"
 $snap = Get-Content "$out\shot.png.json" -Raw
 Write-Output $snap
 $s = $snap | ConvertFrom-Json
@@ -80,7 +80,7 @@ Check ($s.desktop.notifications -contains "hi") "simulated notification"
 Check ((Get-Item "$out\shot.png").Length -gt 2000) "screenshot written"
 
 # Share and import (a zip both ways).
-$f = (& $oa share hello | Select-Object -Last 1)
+$f = (& $oa share hello $T | Select-Object -Last 1)
 Check (Test-Path $f) "shared file $f"
 & $oa import $f
 Check (Test-Path "$T\Apps\Hello 2\Hello 2.exe") "imported as Hello 2"

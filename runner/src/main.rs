@@ -340,7 +340,8 @@ fn main() {
                 // A page that never finishes loading still gets a report.
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_secs(20));
+                    // WebView2's first start on a fresh PC can take over 20 s.
+                    std::thread::sleep(Duration::from_secs(if cfg!(windows) { 50 } else { 20 }));
                     let _ = std::fs::write(&report, json!({ "timeout": true }).to_string());
                     handle.exit(0);
                 });

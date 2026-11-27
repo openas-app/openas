@@ -35,25 +35,6 @@ jobs:
         run: cargo test --workspace --no-fail-fast
       - name: Build release
         run: cargo build --release
-      - name: Diagnose - load check four ways
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          ./runner/scripts/bundle_windows.ps1
-          $exes = @("target\release\runner.exe", "target\Runner\Runner.exe")
-          $i = 0
-          foreach ($exe in $exes) {
-            foreach ($envs in @($false, $true)) {
-              $i++
-              $d = "$env:RUNNER_TEMP\diag$i"; Copy-Item -Recurse tools/smoke/hello $d
-              if ($envs) { $env:OPENAS_ROOT = "$env:RUNNER_TEMP\droot"; $env:OPENAS_QUIET_WINDOW = "1" } else { Remove-Item Env:OPENAS_ROOT -ErrorAction SilentlyContinue; Remove-Item Env:OPENAS_QUIET_WINDOW -ErrorAction SilentlyContinue }
-              $sw = [Diagnostics.Stopwatch]::StartNew()
-              $p = Start-Process $exe -ArgumentList "--check",$d,"--report","$d\r.json" -PassThru -RedirectStandardError "$d\err.txt"
-              $null = $p.WaitForExit(60000)
-              Write-Host "DIAG $exe env=$envs secs=$([int]$sw.Elapsed.TotalSeconds) report=$(Get-Content "$d\r.json" -Raw)"
-              Get-Content "$d\err.txt" | Select-Object -Last 5 | ForEach-Object { Write-Host "DIAG   $_" }
-            }
-          }
       - name: Smoke - install, load check, screenshot, share
         shell: pwsh
         run: |
