@@ -20,24 +20,29 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
-      - name: Simulated desktop compiles
-        run: swiftc -O tools/snap.swift -o target/snap
 
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: cargo check --workspace --all-targets
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace --no-fail-fast
-      - name: Smoke - the Runner opens an app (load check)
+      - name: Build release
+        run: cargo build --release
+      - name: Smoke - install, load check, screenshot, share
         shell: pwsh
         run: |
-          cargo build --release -p runner
-          $d = "$env:RUNNER_TEMP\hello"; Copy-Item -Recurse tools/smoke/hello $d
-          $p = Start-Process target/release/runner.exe -ArgumentList "--check",$d,"--report","$d\r.json" -PassThru
-          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "load check timed out" }
-          Get-Content "$d\r.json"
+          ./runner/scripts/bundle_windows.ps1
+          ./tools/smoke/windows.ps1
+      - name: Keep the screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-smoke
+          path: target/smoke/

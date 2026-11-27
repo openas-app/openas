@@ -370,10 +370,17 @@ fn shrink_png(from: &Path, to: &Path, max: u32) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn snap_exe() -> PathBuf {
-    std::env::var("OPENAS_SNAP")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::runner_bundle().with_file_name("snap"))
+/// The builder's eyes: the Runner in snap mode (runner/src/snap.rs), or a
+/// stand-in taking the same arguments (OPENAS_SNAP, for tests).
+pub(super) fn snap_command() -> Command {
+    match std::env::var("OPENAS_SNAP") {
+        Ok(p) => Command::new(p),
+        Err(_) => {
+            let mut c = Command::new(paths::runner_exe());
+            c.arg("--snap");
+            c
+        }
+    }
 }
 
 pub(super) fn check_tool(
@@ -412,7 +419,7 @@ pub(super) fn check_tool(
         .get("appearance")
         .and_then(Value::as_str)
         .unwrap_or("light");
-    let out = Command::new(snap_exe())
+    let out = snap_command()
         .arg(ws.join("app"))
         .arg(&shot)
         .args([&w, &h])
@@ -425,7 +432,13 @@ pub(super) fn check_tool(
         .stderr(std::process::Stdio::null())
         .output()
         .context("starting the screenshot helper")?;
+    // The report on stdout, or the copy beside the screenshot (a windowed
+    // program's stdout may not reach us on every system).
     let snap: Value = serde_json::from_slice(&out.stdout)
+        .ok()
+        .or_else(|| {
+            serde_json::from_slice(&std::fs::read(shot.with_extension("png.json")).ok()?).ok()
+        })
         .unwrap_or(json!({ "errors": ["the screenshot window did not report back"] }));
     // What the test did with the pointer, for the person to watch.
     if snap

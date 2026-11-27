@@ -24,6 +24,8 @@ mod win;
 #[cfg(windows)]
 use win as os;
 
+#[cfg(windows)]
+pub mod capture;
 pub mod ipc;
 pub mod proc;
 

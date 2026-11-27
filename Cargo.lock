@@ -2796,6 +2796,7 @@ dependencies = [
  "anyhow",
  "openas-core",
  "openas-platform",
+ "plist",
  "serde",
  "serde_json",
 ]
@@ -2827,6 +2828,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "webview2-com",
  "windows",
 ]
 

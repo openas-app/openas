@@ -99,7 +99,69 @@ fn a_modified_copy_of_an_app_is_refused() {
     assert!(text.contains("modified"), "{text}");
 }
 
-/// Run by `a_modified_copy_of_an_app_is_refused` from inside a fake app.
+#[test]
+fn an_intact_installed_copy_is_answered() {
+    // The copy OpenAs recorded, unchanged since: the Helper names it as that
+    // app (it then refuses the undo only because there's nothing to undo).
+    let h = start("intact");
+    let bundle = openas_platform::install_path(&h.root, "Plants");
+    #[cfg(target_os = "macos")]
+    let exe = {
+        let exe = bundle.join("Contents/MacOS/Plants");
+        std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        std::fs::copy(std::env::current_exe().unwrap(), &exe).unwrap();
+        let mut d = plist::Dictionary::new();
+        for (k, v) in [
+            ("CFBundleExecutable", "Plants"),
+            ("CFBundleIdentifier", "app.openas.test.plants"),
+        ] {
+            d.insert(k.into(), plist::Value::String(v.into()));
+        }
+        plist::Value::Dictionary(d)
+            .to_file_xml(bundle.join("Contents/Info.plist"))
+            .unwrap();
+        assert!(Command::new("codesign")
+            .args(["--force", "--sign", "-"])
+            .arg(&bundle)
+            .status()
+            .unwrap()
+            .success());
+        exe
+    };
+    #[cfg(windows)]
+    let exe = {
+        let exe = openas_platform::exe_in(&bundle);
+        std::fs::create_dir_all(&bundle).unwrap();
+        std::fs::copy(std::env::current_exe().unwrap(), &exe).unwrap();
+        std::fs::write(
+            bundle.join("openas-app.json"),
+            r#"{"folder":"x","name":"Plants","id":"app.openas.test.plants"}"#,
+        )
+        .unwrap();
+        exe
+    };
+    let seal = openas_platform::seal(&bundle).expect("a seal");
+    let app = h.root.join("apps/plants");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(
+        app.join("app.json"),
+        serde_json::json!({ "id": "plants", "name": "Plants", "provider": "", "model": "", "created": 1,
+                            "installed": bundle, "cdhash": seal })
+        .to_string(),
+    )
+    .unwrap();
+    let out = Command::new(&exe)
+        .args(["--ignored", "--exact", "as_a_client", "--nocapture"])
+        .env("OA_TEST_ROOT", &h.root)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("REPLY"), "{text}");
+    assert!(!text.contains("not an app OpenAs installed"), "{text}");
+    assert!(!text.contains("not an OpenAs app"), "{text}");
+}
+
+/// Run by the tests above from inside a fake app.
 #[test]
 #[ignore]
 fn as_a_client() {

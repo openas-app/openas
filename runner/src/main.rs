@@ -58,6 +58,7 @@ mod app;
 mod helper;
 mod serve;
 mod sheet;
+mod snap;
 mod talk;
 mod who;
 
@@ -101,6 +102,12 @@ fn take_shared(app: &tauri::AppHandle, files: Vec<String>) {
 }
 
 fn main() {
+    // The builder's eyes: a separate, short-lived mode (see snap.rs).
+    let mut context = tauri::generate_context!();
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).is_some_and(|a| a == "--snap") {
+        snap::run(&args[2..], context);
+    }
     let me = which_app();
     // Windows: the process is this app on the taskbar (its shortcut's id).
     if let Some(id) = &me.id {
@@ -116,7 +123,6 @@ fn main() {
     let pending_root = me.folder.join(".pending/app");
     let pending_index = pending_root.join("index.html");
     let title = me.name.clone();
-    let mut context = tauri::generate_context!();
     if let Some(id) = &me.id {
         context.config_mut().identifier = id.clone();
     }
