@@ -3,7 +3,7 @@
 [![CI](https://github.com/openas-app/openas/actions/workflows/ci.yml/badge.svg)](https://github.com/openas-app/openas/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black.svg)](LICENSE)
 
-**Describe an app. A model builds it, and it installs as a real Mac app.**
+**Describe an app. A model builds it, and it installs as a real app (for mac as of now).**
 
 It gets its own window, name, icon and Dock entry. Change it later by asking,
 from inside the app, and go back to any earlier version.
