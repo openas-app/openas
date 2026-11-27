@@ -5,13 +5,16 @@
 *{box-sizing:border-box}
 html,body{margin:0;min-height:100%;background:var(--bg);color:var(--fg);font:13px/1.45 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;-webkit-font-smoothing:antialiased;cursor:default;-webkit-user-select:none;user-select:none}
 main{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:92px 32px 24px}
+#home{padding-top:0}
+.hero{min-height:max(380px,calc(100vh - 300px));width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:52px}
 .topbar{position:fixed;top:0;left:0;right:0;height:52px;display:flex;align-items:center;padding-left:84px;z-index:4;background:var(--bg)}
 .wm{font:700 15px/20px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.02em}.wm i{font-style:normal;color:var(--signal)}.wm span{font-weight:500}
-h1{font:700 30px/1.07 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.035em;margin:0 0 8px;text-align:center}
+h1{font:600 30px/1.07 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:-.035em;margin:0 0 8px;text-align:center}
 .lead{color:var(--mute);margin:0 0 24px;font-size:15px;line-height:22px;text-align:center}
-.composer{width:min(640px,100%);background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:16px 16px 12px}
+#home h1{font-weight:500;font-size:34px;letter-spacing:-.03em;margin:0 0 28px}
+.composer{width:min(640px,100%);background:var(--card);border:1px solid var(--line2);border-radius:24px;box-shadow:var(--shadow);padding:18px 18px 12px}
 .composer:focus-within{border-color:color-mix(in srgb,var(--accent) 50%,var(--line))}
-textarea{display:block;width:100%;border:0;outline:0;resize:none;background:transparent;color:var(--fg);font:15px/22px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:72px;max-height:240px;padding:0;-webkit-user-select:text;user-select:text}
+textarea{display:block;width:100%;border:0;outline:0;resize:none;background:transparent;color:var(--fg);font:15px/22px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:64px;max-height:240px;padding:0;-webkit-user-select:text;user-select:text}
 textarea::placeholder{color:var(--faint)}
 .foot{display:flex;align-items:center;gap:10px;margin-top:10px}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--line2);color:var(--mute);font-size:12px}
@@ -20,13 +23,22 @@ textarea::placeholder{color:var(--faint)}
 .grow{flex:1}
 .go{font:600 15px/20px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;min-height:44px;padding:0 18px;border-radius:11px;border:0;background:var(--accent);color:var(--on-accent);cursor:default}
 .go:disabled{opacity:.45}
+.composer .go{min-height:34px;padding:0 16px;border-radius:10px;font-size:14px}
+.composer .go:disabled{opacity:1;background:var(--line2);color:var(--faint)}
+.under{width:min(640px,100%);display:flex;align-items:center;padding:12px 18px 0;font-size:13px;color:var(--mute)}
+.model{display:inline-flex;align-items:center;gap:6px;cursor:default}.model:hover{color:var(--fg)}
+.model .dot{width:7px;height:7px;background:var(--signal)}.model.unset{color:var(--fg)}.model.unset .dot{background:var(--faint)}
+.model svg{opacity:.7}
 .msg{min-height:18px;margin-top:12px;color:var(--mute);font-size:13px;line-height:18px;text-align:center}.msg.bad{color:var(--bad)}
-.ideas{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:min(640px,100%);margin:6px 0 0}
+.ideas{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:min(640px,100%);margin:20px 0 0}
 .idea{padding:6px 12px;border:1px solid var(--line);border-radius:999px;color:var(--mute);font-size:13px;line-height:18px}
 .idea:hover{color:var(--fg);border-color:var(--faint)}
-.shelf{width:min(640px,100%);margin-top:48px}
-.shelf h2{font-size:15px;line-height:20px;font-weight:600;color:var(--fg);margin:0 0 12px}
-.apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.shelf{width:min(680px,100%);margin-top:24px}
+.shelf .sh2{display:flex;align-items:baseline;padding:0 8px;margin:0 0 6px}
+.shelf h2{font-size:13px;line-height:18px;font-weight:500;color:var(--mute);margin:0}
+.shelf .all{font-size:13px;color:var(--mute)}.shelf .all:hover{color:var(--fg)}
+.apps.one .app:nth-child(n+6){display:none}
+.apps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
 .app{display:flex;flex-direction:column;align-items:center;gap:7px;padding:16px 8px;border-radius:20px;text-align:center}
 .app:hover{background:var(--line2)}
 .app img,.app .ph{width:64px;height:64px;border-radius:15px}
@@ -126,15 +138,17 @@ textarea::placeholder{color:var(--faint)}
   <div class="msg" id="shMsg" style="text-align:left;min-height:0"></div>
 </div></div>
 <main id="home" hidden>
+<div class="hero">
 <h1>What would you like to make?</h1>
-<p class="lead">Describe it. It's built as an app on your Mac, and you can change it later by asking.</p>
 <div class="composer">
   <textarea id="t" autofocus placeholder="An app that…"></textarea>
-  <div class="foot"><span class="pill" id="pill" role="button" tabindex="0" title="Choose who builds your apps"><span class="dot"></span><span id="pillText"></span></span><span class="grow"></span><button class="go" id="g" disabled>Make app</button></div>
+  <div class="foot"><span class="grow"></span><button class="go" id="g" disabled>Make</button></div>
 </div>
+<div class="under"><span class="model" id="pill" role="button" tabindex="0" title="Choose who builds your apps"><span class="dot"></span><span id="pillText"></span><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 3.5l3 3 3-3"/></svg></span></div>
 <div class="msg" id="s"></div>
-<div class="ideas" id="ideas"></div>
-<div class="shelf"><h2>Your apps</h2><div class="apps" id="list"></div></div>
+<div class="ideas" id="ideas" hidden></div>
+</div>
+<div class="shelf" id="shelf" hidden><div class="sh2"><h2>Your apps</h2><span class="grow"></span><span class="all" id="all" role="button" tabindex="0" hidden></span></div><div class="apps one" id="list"></div></div>
 <p class="note">Apps live in your Applications folder. Their data stays on this Mac.</p>
 </main><script>
 const $ = id => document.getElementById(id);
@@ -149,30 +163,57 @@ window.__home = note => {
   if (note && note.saved) { $("s").className = "msg"; $("s").textContent = note.saved + " is in your Applications. It's opening now."; }
   load();
 };
+// The shelf: apps being made first (with how far they've got), then yours.
+let shelfApps = [], shelfSig = "";
 async function load() {
   const r = await run({ op: "list" });
   if (r.error) { $("s").className = "msg bad"; $("s").textContent = "OpenAs couldn't start its helper: " + r.error; return; }
-  const apps = ((r.ok && r.ok.apps) || []).sort((a, b) => (b.created || 0) - (a.created || 0));
-  const drafts = await oa.drafts().catch(() => []);
+  shelfApps = ((r.ok && r.ok.apps) || []).sort((a, b) => (b.created || 0) - (a.created || 0));
+  drawShelf(await oa.drafts().catch(() => []));
+}
+const WORKING = ["planning", "building", "checking"];
+function draftNote(m) {
+  if (m.phase === "done") return "Ready to save";
+  if (m.phase === "failed" || m.phase === "stopped") return "Didn't finish";
+  return m.parts ? "Step " + Math.max(1, Math.min(m.part || 1, m.parts)) + " of " + m.parts : "Planning";
+}
+function drawShelf(drafts) {
+  shelfSig = JSON.stringify(drafts.map(m => [m.id, m.phase, m.part, m.name]));
   const L = $("list"); L.innerHTML = "";
   for (const m of drafts) {
+    const working = WORKING.includes(m.phase);
     const d = document.createElement("div"); d.className = "app"; d.title = m.request;
-    const done = m.phase === "done", stuck = m.phase === "failed" || m.phase === "stopped";
-    d.innerHTML = '<div class="ph">' + (done || stuck ? "" : "<i></i>") + '</div><span></span><small></small>';
+    d.innerHTML = '<div class="ph">' + (working ? "<i></i>" : "") + '</div><span></span><small></small>';
     d.querySelector("span").textContent = m.name || m.request;
-    d.querySelector("small").textContent = done ? "Ready to save" : stuck ? "Didn't finish" : "Being made";
+    d.querySelector("small").textContent = draftNote(m);
     d.onclick = () => oa.showDraft(m.id);
     L.append(d);
   }
-  for (const a of apps) {
+  for (const a of shelfApps) {
     const d = document.createElement("div"); d.className = "app";
     d.innerHTML = '<img alt=""><span></span><small></small>';
     d.querySelector("img").src = a.icon || ""; d.querySelector("span").textContent = a.name; d.querySelector("small").textContent = day(a.created);
     d.onclick = () => run({ op: "open", app: a.id });
     L.append(d);
   }
-  if (!L.children.length) L.innerHTML = '<div class="empty">No apps yet. Describe one above.</div>';
+  // No apps yet: ideas to start from. Otherwise one row of the newest, and
+  // Show all for the rest.
+  const n = L.children.length;
+  $("shelf").hidden = !n; $("ideas").hidden = !!n;
+  $("all").hidden = n <= 5;
+  $("all").textContent = L.classList.contains("one") ? "Show all " + n : "Show less";
 }
+// While something is being made, its tile keeps up: the step it's on, then
+// Ready to save. A build that went away (saved or discarded) reloads the apps.
+setInterval(async () => {
+  if ($("home").hidden || !shelfSig.includes('"planning"') && !shelfSig.includes('"building"') && !shelfSig.includes('"checking"')) return;
+  const drafts = await oa.drafts().catch(() => null);
+  if (!drafts) return;
+  const was = JSON.parse(shelfSig).length;
+  if (drafts.length < was) return load();
+  const sig = JSON.stringify(drafts.map(m => [m.id, m.phase, m.part, m.name]));
+  if (sig !== shelfSig) drawShelf(drafts);
+}, 2000);
 for (const i of IDEAS) { const b = document.createElement("span"); b.className = "idea"; b.textContent = i; b.onclick = () => { $("t").value = i + ". "; $("t").focus(); upd(); }; $("ideas").append(b); }
 const upd = () => { $("g").disabled = !$("t").value.trim(); const t = $("t"); t.style.height = "auto"; t.style.height = Math.min(240, Math.max(72, t.scrollHeight)) + "px"; };
 $("t").addEventListener("input", upd);
@@ -260,6 +301,7 @@ const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;",
 document.querySelectorAll(".seg button").forEach(b => b.onclick = () => { replacing = false; pick(b.dataset.kind); });
 $("back").onclick = () => { makeAfter = false; $("setup").hidden = true; $("home").hidden = false; $("t").focus(); };
 $("pill").onclick = () => showSetup(false);
+$("all").onclick = () => { $("list").classList.toggle("one"); $("all").textContent = $("list").classList.contains("one") ? "Show all " + $("list").children.length : "Show less"; };
 $("connect").onclick = async () => {
   const p = prov(provId);
   if (!model) { $("cs").className = "msg bad"; $("cs").textContent = "Choose a model first."; return; }

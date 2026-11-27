@@ -35,7 +35,7 @@ pub(crate) fn oa_bridge(name: &str) -> String {
     start: req => call("helper_start", {{ req }}), poll: (job, seen) => call("helper_poll", {{ job, seen }}),
     stop: job => call("helper_stop", {{ job }}), close: () => call("close_sheet"),
     state: () => call("talk_state"), note: text => call("talk_note", {{ text }}), stopMaking: () => call("talk_stop"),
-    code: () => call("talk_code"), hide: () => call("talk_close"), choose: (save, name) => call("talk_choose", {{ save, name }}), carryOn: text => call("talk_continue", {{ text }}), shared: () => call("shared_pending"),
+    code: () => call("talk_code"), hide: () => call("talk_close"), choose: (save, name) => call("talk_choose", {{ save, name }}), carryOn: text => call("talk_continue", {{ text }}), codeView: open => call("draft_code_view", {{ open }}), full: open => call("draft_full", {{ open }}), ask: save => call("talk_ask", {{ save }}), shared: () => call("shared_pending"),
     drafts: () => call("drafts_list"), showDraft: id => call("draft_show", {{ id }}), home: () => call("draft_home") }});
 }})();"#,
         name = serde_json::to_string(name).unwrap()

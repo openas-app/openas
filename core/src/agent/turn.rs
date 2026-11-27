@@ -294,6 +294,8 @@ pub(super) fn run_live(
             let r = run_tool(ws, name, &input, &mut finished, ev, live);
             if r.is_ok() && matches!(name, "create" | "replace" | "insert") {
                 changed = true;
+                let part = input.get("part").and_then(Value::as_u64).or(live.get("part").as_u64()).unwrap_or(0);
+                live.note_step(part, input.get("doing").and_then(Value::as_str), input.get("path").and_then(Value::as_str));
                 live.bump("files_seq");
                 live.flush(true);
             }

@@ -58,6 +58,7 @@ mod app;
 mod helper;
 mod serve;
 mod talk;
+mod sheet;
 mod who;
 
 use api::*;
@@ -126,7 +127,7 @@ fn main() {
         .manage(Jobs::default())
         .manage(Inbox::default())
         .manage(powers::Tray(Mutex::new(None)))
-        .invoke_handler(tauri::generate_handler![store_get, store_set, notify, check_report, helper_start, helper_poll, helper_stop, close_sheet, who::drafts_list, who::draft_show, who::draft_home, talk_state, talk_note, talk_stop, talk_continue, talk_choose, shared_pending, talk_code, talk_close, powers::ask::perm_has, powers::perm_request, powers::files_op, powers::extras::menubar_set, powers::extras::menubar_clear, powers::extras::shortcuts_set, powers::extras::shortcuts_clear, powers::system_run, powers::extras::window_op])
+        .invoke_handler(tauri::generate_handler![store_get, store_set, notify, check_report, helper_start, helper_poll, helper_stop, close_sheet, who::drafts_list, who::draft_show, who::draft_home, who::draft_code_view, who::draft_full, talk_state, talk_note, talk_stop, talk_continue, talk_ask, talk_choose, shared_pending, talk_code, talk_close, powers::ask::perm_has, powers::perm_request, powers::files_op, powers::extras::menubar_set, powers::extras::menubar_clear, powers::extras::shortcuts_set, powers::extras::shortcuts_clear, powers::system_run, powers::extras::window_op])
         .on_menu_event(|app, event| match event.id().as_ref() {
             "change" | "versions" => show_talk(app, true),
             "share" => {
@@ -163,8 +164,6 @@ fn main() {
             }
             "mb-quit" => app.exit(0),
             id if id.starts_with("mb:") => powers::emit(app, "menu-bar", json!(&id[3..])),
-            // The draft's menu presses the same buttons as the card in the column,
-            // so the name typed there is the one it's saved with.
             // A finished app's own edits (OpenAs's window only shows drafts).
             "save-app" | "discard-app" if !app.state::<App>().making && !app.state::<App>().manager => {
                 let me = app.state::<App>();
@@ -172,12 +171,10 @@ fn main() {
                 let req = json!({ "op": op, "app": me.app_id() });
                 start_job(app, req);
             }
+            // A draft: the menu opens a sheet on the window that asks first.
             "save-app" | "discard-app" => {
                 show_talk(app, true);
-                let act = if event.id().as_ref() == "save-app" { "save" } else { "discard" };
-                if let Some(t) = app.get_webview("talk") {
-                    let _ = t.eval(format!("window.__oaChoose && window.__oaChoose('{act}')"));
-                }
+                sheet::ask(app, event.id().as_ref() == "save-app");
             }
             "undo-change" => {
                 let me = app.state::<App>();

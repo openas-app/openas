@@ -37,10 +37,6 @@ body:not(.inhome) .hint:empty{display:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 .back{width:32px;height:32px;flex:none;border-radius:7px;border:0;background:transparent;color:var(--mute);display:grid;place-items:center;cursor:default}
 .back:hover{background:var(--you);color:var(--fg)}
-.hacts{display:flex;gap:8px;flex:none}
-.hb1,.hb2{height:32px;padding:0 12px;border-radius:7px;font:600 13px/18px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;cursor:default}
-.hb1{background:var(--accent);color:var(--on-accent);border:1px solid var(--accent)}
-.hb2{background:transparent;color:var(--fg);border:1px solid var(--line)}.hb2:hover{border-color:var(--mute)}
 .head .grow{flex:1}
 .x{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;color:var(--faint)}.x:hover{background:var(--you);color:var(--fg)}
 .thread{flex:1;overflow-y:auto;padding:4px 16px 12px;display:flex;flex-direction:column;gap:16px;font-size:15px;line-height:22px}
@@ -55,7 +51,7 @@ body:not(.inhome) .hint:empty{display:none}
 .mark{width:16px;height:16px;border-radius:5px;background:var(--accent);display:grid;place-items:center;position:relative}
 .mark::after{content:"";width:5px;height:5px;background:var(--signal)}
 .work{display:flex;flex-direction:column;gap:7px;margin-top:2px}
-.latest{color:var(--mute);font-size:12.5px;line-height:1.5;padding-left:19px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.latest{color:var(--mute);font-size:12.5px;line-height:1.5;padding-left:19px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
 .fold{margin:6px 0 0 19px;color:var(--faint);font-size:12px}
 .fold summary{cursor:default;list-style:none}.fold summary::-webkit-details-marker{display:none}
 .fold summary::before{content:"›";display:inline-block;width:12px;transition:transform .15s}.fold[open] summary::before{transform:rotate(90deg)}
@@ -77,6 +73,20 @@ body:not(.inhome) .hint:empty{display:none}
 .status{display:flex;align-items:center;gap:8px;color:var(--mute);font-size:12px}
 .status .spin{width:11px;height:11px;flex:none;border-radius:50%;border:1.6px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite}
 .summary{-webkit-user-select:text;user-select:text}
+/* One line first; a click opens the rest in place. */
+.zoom{cursor:default}
+.zoom .more{color:var(--faint);font-size:13px;white-space:nowrap}.zoom:hover .more{color:var(--fg)}
+.zoom.anim,.pd.anim{animation:zin .18s ease-out}
+@keyframes zin{from{opacity:0;transform:translateY(-3px)}}
+.parts li.can{cursor:default}
+.parts li .cv{width:10px;flex:none;color:var(--faint);transition:transform .15s;margin-left:2px}
+.parts li.can:hover,.parts li.can:hover .cv{color:var(--fg)}
+.parts li.opened .cv{transform:rotate(90deg)}
+.parts li .note + .cv{margin-left:8px}
+.parts li.pd{display:block;padding:0 0 4px 24px;color:var(--mute);font-weight:400;font-size:12.5px;line-height:1.5}
+.pd div{position:relative;padding-left:11px}.pd div::before{content:"";position:absolute;left:0;top:.62em;width:4px;height:4px;border-radius:50%;background:var(--faint)}
+.pd .files{margin-top:4px;padding:0;font:500 11px/16px "JetBrains Mono",ui-monospace,Menlo,monospace;color:var(--faint)}.pd .files::before{display:none}
+.latest{cursor:default}
 .meta{color:var(--faint);font-size:11.5px;display:flex;gap:10px;align-items:center}
 .meta .grow{flex:1}
 .link{color:var(--fg);text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--line);cursor:pointer}
@@ -85,12 +95,6 @@ body:not(.inhome) .hint:empty{display:none}
 .ver .now{margin-left:auto;font-size:11px;color:var(--accent);font-weight:600;flex:none}
 .ver .link{margin-left:auto;font-size:11.5px;flex:none}
 .btn.save{background:var(--accent);color:var(--on-accent);width:auto;height:auto;padding:7px 14px;border-radius:11px;font:600 13px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
-.ask{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:20px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow)}
-.ask b{font-size:15px;line-height:20px;font-weight:600}
-.ask p{margin:0;font-size:13px;line-height:18px;color:var(--mute)}
-.ask label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--mute)}
-.ask input{font:15px/22px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:11px;padding:10px 12px;outline:0}
-.ask input:focus{border-color:var(--accent)}
 .acts{display:flex;gap:12px}
 .b1,.b2{min-height:44px;padding:0 18px;border-radius:11px;font:600 15px/20px "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;cursor:default}
 .b1{background:var(--accent);color:var(--on-accent);border:1px solid var(--accent)}
@@ -108,6 +112,12 @@ textarea::placeholder{color:var(--faint)}
 .row{display:flex;align-items:center;gap:8px;margin-top:4px}
 .hint{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums;padding:0 18px 12px;margin-top:-8px}
 .row .grow,.rhead .grow{flex:1}
+/* The bar's tools over the app: code, fill the window, share, save. */
+.tools{display:flex;gap:2px;flex:none}
+.tb{width:30px;height:30px;padding:0;border:0;border-radius:7px;background:transparent;color:var(--mute);display:grid;place-items:center;cursor:default}
+.tb:hover:not(:disabled):not(.off),.tb.on{background:var(--you);color:var(--fg)}
+.tb:disabled,.tb.off{opacity:.35}
+body.full{--tw:0px}body.full .col{display:none}body.full .rhead{padding-left:92px}
 .btn{width:26px;height:26px;border-radius:50%;border:0;padding:0;display:grid;place-items:center;cursor:default;font:700 14px/1 "Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 .send{background:var(--accent);color:var(--on-accent)}.send:disabled{background:var(--line)}
 .stop{background:var(--fg)}.stop::after{content:"";width:8px;height:8px;border-radius:2px;background:var(--card)}
@@ -116,6 +126,8 @@ textarea::placeholder{color:var(--faint)}
 .code .tabs{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);overflow-x:auto;flex:none;align-items:center}
 .code .tab{padding:3px 9px;border-radius:6px;color:var(--mute);font-size:12px;white-space:nowrap}
 .code .tab.on{background:var(--you);color:var(--fg)}
+/* In OpenAs's window the code takes the app's place in the panel. */
+body.inhome .code{inset:var(--bar,52px) 8px 8px calc(var(--tw) + 8px);border:1px solid color-mix(in srgb,#808080 35%,transparent);border-radius:10px;overflow:hidden;background:var(--card)}
 .code pre{flex:1;margin:0;overflow:auto;padding:12px 14px;font:500 12px/18px "JetBrains Mono",ui-monospace,Menlo,monospace;-webkit-user-select:text;user-select:text;white-space:pre}
 </style></head><body>
 <div class="col">
@@ -128,7 +140,7 @@ textarea::placeholder{color:var(--faint)}
 </div>
 <div class="hint" id="hint"></div>
 </div>
-<div class="right" id="right"><div class="rhead" data-tauri-drag-region><span class="chip" id="chip" hidden></span><span class="grow" data-tauri-drag-region></span><div class="hacts" id="hacts"></div></div><div class="stage"></div></div>
+<div class="right" id="right"><div class="rhead" data-tauri-drag-region><span class="chip" id="chip" hidden></span><span class="grow" data-tauri-drag-region></span><div class="tools" id="tools" hidden><button class="tb" data-act="code" title="Show code" aria-label="Show code"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/></svg></button><button class="tb" id="tbFull" title="Fill the window" aria-label="Fill the window"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9"/></svg></button><button class="tb off" id="tbShare" title="Save the app first to share it" aria-label="Share" aria-disabled="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 10V2.5M5 5.5l3-3 3 3"/><path d="M3.5 8v4.5a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V8"/></svg></button><button class="tb" id="tbSave" title="Save as App" aria-label="Save as App" disabled><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7M5 7l3 3 3-3"/><path d="M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></svg></button></div></div><div class="stage"></div></div>
 <div class="code" id="code"><div class="tabs" id="tabs"><span class="x" id="codeX" title="Close" style="margin-left:auto">✕</span></div><pre id="src"></pre></div>
 <script>
 const $ = id => document.getElementById(id);
@@ -150,15 +162,34 @@ let S = null, versions = [], job = null, pending = [], lastSig = "", follow = tr
 // A change in progress (the window that asked follows it; a fresh window trusts a recent state).
 const active = m => m && WORKING.includes(m.phase) && (job || S.mode === "making" || Date.now() / 1000 - (m.now || 0) < 90);
 
+// One line first; a click opens the rest in place. `opening` is the one just
+// opened, which eases in on this render only.
+const opened = new Set();
+let opening = null;
+const CV = '<svg class="cv" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3.5 2l3 3-3 3"/></svg>';
 function partsHtml(m) {
   const parts = (m.plan && m.plan.parts) || [], cur = m.part || 1, done = m.phase === "done";
   return `<ul class="parts">${parts.map((p, i) => {
-    const n = i + 1;
-    if (done || n < cur) return `<li class="done"><span class="st"></span>${esc(p)}</li>`;
-    if (n === cur && WORKING.includes(m.phase)) return `<li class="now"><span class="st"></span>${esc(p)}<span class="note">${m.phase === "checking" ? "checking" : m.kb ? m.kb + " KB" : ""}</span></li>`;
+    const n = i + 1, key = "part:" + m.started + ":" + n, st = (m.steps || {})[n];
+    const can = st && ((st.did || []).length || (st.files || []).length), open = can && opened.has(key);
+    const zoom = can ? ` can${open ? " opened" : ""}" data-zoom="${key}" role="button" tabindex="0" aria-expanded="${!!open}` : "";
+    const more = open ? `<li class="pd${opening === key ? " anim" : ""}">${(st.did || []).map(d => `<div>${esc(d)}</div>`).join("")}${(st.files || []).length ? `<div class="files">${st.files.map(esc).join("  ")}</div>` : ""}</li>` : "";
+    if (done || n < cur) return `<li class="done${zoom}"><span class="st"></span>${esc(p)}${can ? CV : ""}</li>` + more;
+    if (n === cur && WORKING.includes(m.phase)) return `<li class="now${zoom}"><span class="st"></span>${esc(p)}<span class="note">${m.phase === "checking" ? "checking" : m.kb ? m.kb + " KB" : ""}</span>${can ? CV : ""}</li>` + more;
     return `<li><span class="st"></span>${esc(p)}</li>`;
   }).join("")}</ul>`;
 }
+// The first sentence, when there's more after it.
+const firstOf = t => {
+  const s = String(t || "").trim(), f = (s.match(/^[\s\S]*?[.!?](?=\s|$)/) || [s])[0].split("\n")[0].trim();
+  return f.length < s.length - 1 ? f : null;
+};
+const sumHtml = (key, text) => {
+  const f = firstOf(text);
+  if (!f) return `<p class="summary">${prose(text)}</p>`;
+  if (opened.has(key)) return `<p class="summary zoom${opening === key ? " anim" : ""}" data-zoom="${key}" role="button" tabindex="0" aria-expanded="true">${prose(text)} <span class="more">Less</span></p>`;
+  return `<p class="summary zoom" data-zoom="${key}" role="button" tabindex="0" aria-expanded="false">${prose(f)} <span class="more">More</span></p>`;
+};
 
 const modelName = id => ({ "claude-opus-5-5": "Claude Opus 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5", "claude-haiku-5-5": "Claude Haiku 5.5" })[id] || String(id).split(":")[0].split("/").pop();
 let chosenName = null;
@@ -181,7 +212,6 @@ document.addEventListener("toggle", e => { if (e.target.classList && e.target.cl
 const carryOnHtml = m => {
   if (S.mode !== "making") return "";
   if (discarding) return `<div class="ready"><div><b>Discarding…</b></div></div>`;
-  if (asking === "discard") return `<div class="ask"><b>Discard ${esc(m.name || "this app")}?</b><p>The app and this conversation are deleted. Nothing is added to your Applications.</p><div class="acts"><button class="b1" data-act="do-discard">Discard</button><button class="b2" data-act="cancel">Cancel</button></div></div>`;
   return `<div class="acts"><button class="b1" data-act="carry-on">${m.phase === "failed" ? "Try again" : "Continue"}</button><button class="b2" data-act="ask-discard">Discard</button></div>`;
 };
 function makingHtml(m) {
@@ -193,20 +223,18 @@ function makingHtml(m) {
   h += who(m.phase === "done" ? "" : planning ? "planning" : m.kind === "change" ? "changing" : "making");
   // Once it's done, the closing summary says what it is: the plan's own
   // summary would say it twice.
-  if (m.plan) h += `<div class="plan">${m.phase === "done" ? "" : `<div>${esc(m.plan.summary)}</div>`}${partsHtml(m)}</div>`;
+  if (m.plan) h += `<div class="plan">${m.phase === "done" ? "" : sumHtml("plan:" + m.started, m.plan.summary)}${partsHtml(m)}</div>`;
   for (const n of m.notes || []) h += `<div class="steer">${esc(n.text)}<small>Noted. Used from the next step.</small></div>`;
   for (const n of pending.filter(p => !(m.notes || []).some(x => x.text === p))) h += `<div class="steer">${esc(n)}<small>Sent. Read after the current step.</small></div>`;
   if (m.phase === "done") {
     if (thought.key === m.started && thought.ms >= 1000) h += foldHtml();
-    if (m.unfinished) h += `<p class="summary">${esc(m.unfinished)} What it made so far is on the left. If it works, save it; you can finish it later by asking for changes.</p>`;
-    else h += `<p class="summary">${prose(m.summary)}</p>`;
+    if (m.unfinished) h += `<p class="summary">${esc(m.unfinished)} What it made so far is open beside this. If it works, save it; you can finish it later by asking for changes.</p>`;
+    else h += sumHtml("sum:" + m.started, m.summary);
     const nm = esc(chosenName || m.name || "The app");
     if (S.mode === "making" && S.moved) h += `<div class="ready"><div><b>${S.moved.discarded ? "Discarded" : nm + " is in your Applications"}</b><span>${S.moved.discarded ? "Nothing was added to your Applications." : "It's opening now, in its own window."}</span></div></div>`;
     else if (S.mode === "making" && chosenName != null) h += `<div class="ready"><div><b>Saving ${nm}…</b><span>Adding it to your Applications</span></div></div>`;
     else if (S.mode === "making" && discarding) h += `<div class="ready"><div><b>Discarding…</b></div></div>`;
-    else if (S.mode === "making" && asking === "save") h += `<div class="ask"><b>Save as App</b><label>Name<input id="saveName" value="${esc(m.name || "")}" maxlength="60" spellcheck="false"></label><p>It goes in your Applications folder with its own icon and window. It can't reach your files or run programs unless you allow it.</p><div class="acts"><button class="b1" data-act="do-save">Save as App</button><button class="b2" data-act="cancel">Cancel</button></div></div>`;
-    else if (S.mode === "making" && asking === "discard") h += `<div class="ask"><b>Discard ${esc(m.name || "this app")}?</b><p>The app and this conversation are deleted. Nothing is added to your Applications.</p><div class="acts"><button class="b1" data-act="do-discard">Discard</button><button class="b2" data-act="cancel">Cancel</button></div></div>`;
-    h += `<div class="meta">${m.model ? esc(modelName(m.model)) + " · " : ""}${m.minutes} min · ${m.step} steps${m.usd != null ? " · $" + Number(m.usd).toFixed(2) : ""}<span class="grow"></span><span class="link" role="button" tabindex="0" data-act="code">Show code</span></div>`;
+    h += `<div class="meta">${m.model ? esc(modelName(m.model)) + " · " : ""}${m.minutes} min · ${m.step} steps${m.usd != null ? " · $" + Number(m.usd).toFixed(2) : ""}<span class="grow"></span>${S.home ? "" : '<span class="link" role="button" tabindex="0" data-act="code">Show code</span>'}</div>`;
   } else if (m.phase === "failed") {
     const limit = String(m.error || "").startsWith("[limit] ");
     h += `<p class="bad">${limit ? "<b>Spending limit reached.</b> " : ""}${esc(String(m.error || "It stopped.").replace(/^\[limit\] /, ""))}</p><p class="meta">${m.kind === "change" ? "Nothing changed in your app." : "Nothing was installed."}</p>`;
@@ -223,7 +251,7 @@ function makingHtml(m) {
     track(m, words);
     // Only the newest sentence, live; everything before it folds into one line.
     const parts = words.split(/(?<=[.!?])\s+/).filter(Boolean), latest = parts[parts.length - 1] || "";
-    if (latest) h += `<div class="latest">${esc(latest)}</div>`;
+    if (latest) h += `<div class="latest" data-zoom="thought" role="button" tabindex="0" title="Show everything it thought">${esc(latest)}</div>`;
     if (thought.ms >= 1000) h += foldHtml();
     h += `</div>`;
   }
@@ -238,7 +266,7 @@ function storyHtml() {
     const label = i === 0 ? "The first version" : e.request;
     const name = i === 0 ? "First version" : e.request;
     h += `<div class="you">${esc(e.request)}<span class="when">${when(e.t)}</span></div><div class="oa">${who()}`;
-    if (e.summary) h += `<p class="summary">${prose(e.summary)}</p>`;
+    if (e.summary) h += sumHtml("story:" + (e.t || i), e.summary);
     // After going back, the version gone back to is the one in use.
     const isLive = live && live.label.replace(/^Back to: /, "") === label;
     const kept = versions.find(v => !v.live && v.label === label);
@@ -265,9 +293,7 @@ function render() {
     // Follows the newest only while you're at the bottom; once you scroll up
     // it stays exactly where you put it.
     const th = $("thread"), top = th.scrollTop;
-    const sn = $("saveName"), typed = sn ? sn.value : null, focused = sn && document.activeElement === sn;
     th.innerHTML = h; lastSig = h;
-    if (typed != null && $("saveName")) { $("saveName").value = typed; if (focused) $("saveName").focus(); }
     // Rebuilt spinners carry on from the same clock instead of restarting.
     const phase = -(performance.now() % 1000) + "ms";
     th.querySelectorAll(".parts li.now .st, .status .spin").forEach(e => e.style.animationDelay = phase);
@@ -291,12 +317,10 @@ function render() {
     const icon = working || saving || discarding ? '<i class="sp"></i>' : '<i class="ok"></i>';
     if (chip.dataset.l !== label) { chip.dataset.l = label; chip.innerHTML = icon + esc(label); }
   }
-  const showActs = S.home && m && m.phase === "done" && !S.moved && chosenName == null && !discarding && !asking;
-  const ha = $("hacts"), want = showActs ? "1" : "";
-  if (ha.dataset.on !== want) {
-    ha.dataset.on = want;
-    ha.innerHTML = showActs ? '<button class="hb2" data-act="ask-discard">Discard</button><button class="hb1" data-act="ask-save">Save as App</button>' : "";
-  }
+  $("tools").hidden = !(S.home && m);
+  // Another build shown, or this one saved: the conversation is back.
+  if (full && (!m || S.moved || m.started !== fullKey)) setFull(false, true);
+  $("tbSave").disabled = !(m && m.phase === "done" && !S.moved && chosenName == null && !discarding);
   $("close").style.display = S.mode === "making" ? "none" : "";
   $("homeLink").hidden = !S.home;
   const busy = !!m && WORKING.includes(m.phase) && (S.mode === "making" || active(m));
@@ -354,27 +378,38 @@ $("send").onclick = async () => {
   watch();
 };
 $("close").onclick = () => oa.hide();
-// Save as App and Discard live in the menu bar; the menu calls this. Each
-// asks first, here: the name to save it under, or whether to throw it away.
-let asking = null, discarding = false;
-window.__oaChoose = act => {
+// Save as App and Discard live in the menu bar. Their sheet asks first
+// (the name, or whether to throw it away) and hands the answer here.
+let discarding = false;
+window.__oaChose = async (save, name) => {
   if (chosenName != null || discarding || (S && S.moved)) return;
-  asking = act === "save" ? "save" : "discard";
-  lastSig = ""; follow = true; render();
-  const sn = $("saveName"); if (sn) { sn.focus(); sn.select(); }
+  follow = true; lastSig = "";
+  if (save) {
+    chosenName = name || (S && S.making && S.making.name) || ""; render();
+    try { await oa.choose(true, chosenName); } catch (e) { chosenName = null; lastSig = ""; render(); }
+  } else {
+    discarding = true; render();
+    try { await oa.choose(false, ""); } catch (e) { discarding = false; lastSig = ""; render(); }
+  }
 };
 const carryOn = async text => {
   if (!text && !S) return;
   $("t").value = ""; $("t").style.height = "auto"; follow = true;
   try { await oa.carryOn(text); } catch (e) { $("hint").textContent = String(e); }
 };
-const doSave = async () => {
-  const m = S && S.making;
-  const name = (($("saveName") && $("saveName").value) || "").trim() || (m && m.name) || "";
-  asking = null; chosenName = name; lastSig = ""; render();
-  try { await oa.choose(true, name); } catch (e) { chosenName = null; lastSig = ""; render(); }
-};
-$("homeLink").onclick = () => oa.home();
+$("homeLink").onclick = () => { $("code").classList.remove("on"); setFull(false, true); oa.home(); };
+// Fill the window: the conversation steps aside and the app takes the room.
+let full = false, fullKey = null;
+const FULL_IN = $("tbFull").innerHTML, FULL_OUT = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 7H9V3M3 9h4v4M9 7l4.5-4.5M7 9l-4.5 4.5"/></svg>';
+function setFull(on, local) {
+  full = on; fullKey = on && S && S.making ? S.making.started : null; document.body.classList.toggle("full", on);
+  const b = $("tbFull"); b.innerHTML = on ? FULL_OUT : FULL_IN;
+  b.title = on ? "Show the conversation" : "Fill the window"; b.setAttribute("aria-label", b.title);
+  if (!local) oa.full(on).catch(() => {});
+}
+$("tbFull").onclick = () => setFull(!full);
+$("tbSave").onclick = () => oa.ask(true);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && full && !$("code").classList.contains("on")) setFull(false); });
 $("nameBtn").onclick = e => {
   if (!S || !S.home) return;
   e.stopPropagation();
@@ -386,18 +421,26 @@ $("nameBtn").onclick = e => {
   mn.hidden = !mn.hidden;
 };
 document.addEventListener("click", () => { $("menu").hidden = true; }, true);
+// Return or Space on a line that opens does what a click does.
 document.addEventListener("keydown", e => {
-  if (e.target.id === "saveName" && e.key === "Enter") { e.preventDefault(); doSave(); }
-  if (asking && e.key === "Escape") { asking = null; lastSig = ""; render(); }
+  const z = e.target.closest && e.target.closest("[data-zoom]");
+  if (z && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); z.click(); }
 });
 document.addEventListener("click", async e => {
+  const z = e.target.closest("[data-zoom]");
+  // Selecting text in a summary isn't a click to fold it.
+  if (z && !e.target.closest("[data-act]") && (window.getSelection().isCollapsed || !z.contains(window.getSelection().anchorNode))) {
+    const key = z.dataset.zoom;
+    if (key === "thought") thought.open = true;
+    else if (opened.has(key)) opened.delete(key);
+    else { opened.add(key); opening = key; }
+    // Opening something stays where you are, instead of jumping to the newest.
+    const keep = follow; follow = false; lastSig = ""; render(); follow = keep; opening = null;
+    return;
+  }
   const a = e.target.closest("[data-act]"); if (!a) return;
   if (a.dataset.act === "carry-on") return carryOn("");
-  if (a.dataset.act === "ask-save") return window.__oaChoose("save");
-  if (a.dataset.act === "ask-discard") return window.__oaChoose("discard");
-  if (a.dataset.act === "do-save") return doSave();
-  if (a.dataset.act === "cancel") { asking = null; lastSig = ""; render(); return; }
-  if (a.dataset.act === "do-discard") { asking = null; discarding = true; lastSig = ""; render(); try { await oa.choose(false, ""); } catch (e) { discarding = false; render(); } return; }
+  if (a.dataset.act === "ask-discard") return oa.ask(false);
   if (a.dataset.act === "restore") {
     a.textContent = "Going back…";
     await run({ op: "restore", version: Number(a.dataset.v) }); await loadVersions();
@@ -411,9 +454,11 @@ document.addEventListener("click", async e => {
       tabs.insertBefore(b, $("codeX"));
     });
     $("src").textContent = files[0] ? files[0].text : ""; $("code").classList.add("on");
+    if (S && S.home) oa.codeView(true).catch(() => {});
   }
 });
-// Return in the name field saves.
-$("codeX").onclick = () => $("code").classList.remove("on");
+const closeCode = () => { $("code").classList.remove("on"); if (S && S.home) oa.codeView(false).catch(() => {}); };
+$("codeX").onclick = closeCode;
+document.addEventListener("keydown", e => { if (e.key === "Escape" && $("code").classList.contains("on")) closeCode(); });
 tick().then(() => setTimeout(loadVersions, 300));
 </script></body></html>

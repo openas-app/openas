@@ -40,6 +40,9 @@ pub fn talk_state(webview: tauri::Webview, who: State<Who>) -> Result<Value, Str
     } else {
         None
     };
+    if me.making {
+        crate::who::settle(&me.folder);
+    }
     let making = read_json(&me.folder.join("making.json"));
     Ok(
         json!({ "mode": if me.making { "making" } else { "app" }, "name": me.name, "making": making, "icon": icon,
@@ -258,4 +261,13 @@ pub(crate) fn show_talk(app: &AppHandle, open: bool) {
 /// with what it's trying in a caption at the bottom.
 pub(crate) fn ghost_js(g: &Value) -> String {
     include_str!("../pages/ghost.js").replace("__OPENAS_GHOST__", &g.to_string())
+}
+
+/// Discard from the conversation (a build that stopped or failed, or the
+/// name menu): the same sheet the menu bar opens.
+#[tauri::command]
+pub fn talk_ask(save: bool, webview: tauri::Webview, app: tauri::AppHandle) -> Result<(), String> {
+    only_talk(&webview)?;
+    crate::sheet::ask(&app, save);
+    Ok(())
 }

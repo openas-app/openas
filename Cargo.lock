@@ -3407,6 +3407,7 @@ dependencies = [
 name = "runner"
 version = "0.1.0"
 dependencies = [
+ "block2",
  "dirs",
  "libc",
  "objc2",

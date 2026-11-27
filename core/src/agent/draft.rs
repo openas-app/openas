@@ -206,6 +206,15 @@ pub(super) fn wait_for_choice(ws: &Path, name: &str) -> Choice {
 /// the making window can step aside. OPENAS_AUTO_KEEP saves without asking
 /// (scripts and tests).
 pub fn make_run(ws: &Path) -> Result<()> {
+    // Held for as long as this build runs. The system lets go of it however
+    // the process ends (crash, kill, restart), so OpenAs can tell a build
+    // that's working from one that died without saying so.
+    let _alive = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(ws.join(BUILD_LOCK))?;
+    _alive.lock()?;
     // Carrying on after a stop or a failure: what to do next, said once.
     // `continue.json`: {"request": for the model, "shown": for the person}.
     let cont = ws.join("continue.json");
@@ -328,6 +337,10 @@ pub(super) fn making_window(ws: &Path) -> PathBuf {
         Err(_) => paths::runner_exe(),
     }
 }
+
+/// The lock a running build holds in its draft folder (runner/src/who.rs
+/// reads it under the same name).
+const BUILD_LOCK: &str = "build.lock";
 
 /// Starts making an app: the build in its own process, and (with `window`)
 /// the making window beside it. Returns the draft folder.

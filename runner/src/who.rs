@@ -20,6 +20,10 @@ pub(crate) struct Who {
     pub(crate) home: Arc<App>,
     home_store: Arc<Store>,
     shown: Mutex<Option<Draft>>,
+    /// The draft's code is open in the panel, in place of the app.
+    code_open: std::sync::atomic::AtomicBool,
+    /// The app fills the window, with the conversation put away.
+    full: std::sync::atomic::AtomicBool,
 }
 
 impl Who {
@@ -28,6 +32,8 @@ impl Who {
             home: Arc::new(home),
             home_store: Arc::new(store),
             shown: Mutex::new(None),
+            code_open: Default::default(),
+            full: Default::default(),
         }
     }
 
@@ -39,6 +45,8 @@ impl Who {
     }
 
     fn set_shown(&self, d: Option<Draft>) {
+        self.code_open.store(false, std::sync::atomic::Ordering::Relaxed);
+        self.full.store(false, std::sync::atomic::Ordering::Relaxed);
         *self
             .shown
             .lock()
@@ -92,6 +100,42 @@ fn draft_id_ok(id: &str) -> bool {
         .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
+/// The lock a running build holds in its draft folder (core's draft.rs
+/// takes it under the same name).
+const BUILD_LOCK: &str = "build.lock";
+
+/// A draft whose making.json says it's working while its build process is
+/// gone (crashed, killed, the Mac restarted) is marked stopped, so it can be
+/// continued or discarded instead of showing "Being made" forever.
+pub(crate) fn settle(ws: &Path) {
+    let p = ws.join("making.json");
+    let mut m = read_json(&p);
+    if !matches!(m["phase"].as_str(), Some("planning" | "building" | "checking")) || build_alive(ws, &m) {
+        return;
+    }
+    m["phase"] = json!("stopped");
+    let tmp = ws.join(".settle.tmp");
+    if std::fs::write(&tmp, m.to_string()).is_ok() {
+        let _ = std::fs::rename(&tmp, p);
+    }
+}
+
+fn build_alive(ws: &Path, m: &Value) -> bool {
+    match std::fs::OpenOptions::new().write(true).open(ws.join(BUILD_LOCK)) {
+        // Taking it would only work if nobody holds it; dropped at once.
+        Ok(f) => matches!(f.try_lock(), Err(std::fs::TryLockError::WouldBlock)),
+        // No lock yet: the build is still starting, or it's from before the
+        // lock existed. Trust a recent heartbeat only.
+        Err(_) => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
+            let last = m["now"].as_u64().or(m["started"].as_u64()).unwrap_or(0);
+            now.saturating_sub(last) < 60
+        }
+    }
+}
+
 /// The apps being made, newest first, for Home's shelf.
 pub(crate) fn drafts(home: &App) -> Vec<Value> {
     let mut out = vec![];
@@ -101,6 +145,7 @@ pub(crate) fn drafts(home: &App) -> Vec<Value> {
         if !draft_id_ok(&id) || !p.is_dir() || p.with_extension("moved").exists() {
             continue;
         }
+        settle(&p);
         let m = read_json(&p.join("making.json"));
         let request = std::fs::read_to_string(p.join("prompt.txt")).unwrap_or_default();
         out.push(json!({
@@ -109,6 +154,8 @@ pub(crate) fn drafts(home: &App) -> Vec<Value> {
             "name": m["name"],
             "phase": m["phase"],
             "started": m["started"],
+            "part": m["part"],
+            "parts": m["plan"]["parts"].as_array().map_or(0, Vec::len),
         }));
     }
     out.sort_by(|a, b| b["id"].as_str().cmp(&a["id"].as_str()));
@@ -252,11 +299,18 @@ pub(crate) const BAR_H: f64 = 52.0;
 const PANEL_INSET: f64 = 8.0;
 const PANEL_R: f64 = 10.0;
 
-/// Rounds a webview's corners, so the app reads as a panel in the window.
+/// Rounds a webview's corners and draws a thin outline round it, so the app
+/// reads as a panel in the window whatever colour the app itself is.
 fn round_corners(w: &tauri::Webview, r: f64) {
     #[cfg(target_os = "macos")]
     let _ = w.with_webview(move |p| unsafe {
-        use objc2::{msg_send, runtime::AnyObject};
+        use objc2::encode::{Encoding, RefEncode};
+        use objc2::{class, msg_send, runtime::AnyObject};
+        #[repr(C)]
+        struct CGColor([u8; 0]);
+        unsafe impl RefEncode for CGColor {
+            const ENCODING_REF: Encoding = Encoding::Pointer(&Encoding::Struct("CGColor", &[]));
+        }
         let view = p.inner().cast::<AnyObject>();
         if view.is_null() {
             return;
@@ -265,6 +319,11 @@ fn round_corners(w: &tauri::Webview, r: f64) {
         let layer: *mut AnyObject = msg_send![view, layer];
         if !layer.is_null() {
             let _: () = msg_send![layer, setCornerRadius: r];
+            // Mid grey at low strength: visible on a dark app and a light one.
+            let c: *mut AnyObject = msg_send![class!(NSColor), colorWithWhite: 0.5f64, alpha: 0.35f64];
+            let cg: *const CGColor = msg_send![c, CGColor];
+            let _: () = msg_send![layer, setBorderColor: cg];
+            let _: () = msg_send![layer, setBorderWidth: 1.0f64];
             let _: () = msg_send![layer, setMasksToBounds: true];
         }
     });
@@ -287,8 +346,10 @@ pub(crate) fn layout(app: &AppHandle) {
         position: tauri::LogicalPosition::new(x, y).into(),
         size: tauri::LogicalSize::new(w.max(1.0), h.max(1.0)).into(),
     };
-    let making = app.state::<Who>().shown().is_some();
-    let tw = TALK_W.min(w * 0.5);
+    let who = app.state::<Who>();
+    let making = who.shown().is_some();
+    let code = who.code_open.load(std::sync::atomic::Ordering::Relaxed);
+    let tw = if who.full.load(std::sync::atomic::Ordering::Relaxed) { 0.0 } else { TALK_W.min(w * 0.5) };
     if let Some(m) = app.get_webview("main") {
         let _ = m.set_bounds(rect(0.0, 0.0, w, h));
         let _ = if making { m.hide() } else { m.show() };
@@ -296,7 +357,7 @@ pub(crate) fn layout(app: &AppHandle) {
     if let Some(a) = app.get_webview("app") {
         let px = tw + PANEL_INSET;
         let _ = a.set_bounds(rect(px, BAR_H, w - px - PANEL_INSET, h - BAR_H - PANEL_INSET));
-        let _ = if making { a.show() } else { a.hide() };
+        let _ = if making && !code { a.show() } else { a.hide() };
     }
     if let Some(t) = app.get_webview("talk") {
         let _ = t.set_bounds(rect(0.0, 0.0, w, h));
@@ -407,6 +468,32 @@ pub fn draft_show(id: String, webview: tauri::Webview, app: AppHandle) -> Result
         return Err("not allowed".into());
     }
     show(&app, &id)
+}
+
+/// Show code: the panel shows the draft's code instead of the app (the
+/// conversation page draws it there), and the app again when it's closed.
+#[tauri::command]
+pub fn draft_code_view(open: bool, webview: tauri::Webview, app: AppHandle) -> Result<(), String> {
+    let who = app.state::<Who>();
+    if webview.label() != "talk" || !who.home.manager {
+        return Err("not allowed".into());
+    }
+    who.code_open.store(open, std::sync::atomic::Ordering::Relaxed);
+    layout(&app);
+    Ok(())
+}
+
+/// The bar's fill-the-window button: the app takes the whole window, and the
+/// conversation comes back when it's pressed again.
+#[tauri::command]
+pub fn draft_full(open: bool, webview: tauri::Webview, app: AppHandle) -> Result<(), String> {
+    let who = app.state::<Who>();
+    if webview.label() != "talk" || !who.home.manager {
+        return Err("not allowed".into());
+    }
+    who.full.store(open, std::sync::atomic::Ordering::Relaxed);
+    layout(&app);
+    Ok(())
 }
 
 /// The conversation's way back to Home.
