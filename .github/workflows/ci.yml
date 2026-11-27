@@ -33,3 +33,11 @@ jobs:
         run: cargo check --workspace --all-targets
       - name: Test
         run: cargo test --workspace --no-fail-fast
+      - name: Smoke - the Runner opens an app (load check)
+        shell: pwsh
+        run: |
+          cargo build --release -p runner
+          $d = "$env:RUNNER_TEMP\hello"; Copy-Item -Recurse tools/smoke/hello $d
+          $p = Start-Process target/release/runner.exe -ArgumentList "--check",$d,"--report","$d\r.json" -PassThru
+          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "load check timed out" }
+          Get-Content "$d\r.json"
