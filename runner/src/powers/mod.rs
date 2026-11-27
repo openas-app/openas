@@ -44,7 +44,18 @@ pub(crate) const MAX_LIST: usize = 5000;
 // ---- Grants ------------------------------------------------------------------
 
 /// The version a grant is tied to: when the app's code was last put in place.
+/// While a change waits to be saved, its code is what runs, so it is a version
+/// of its own and asks again; a grant given to it never carries over.
 pub(crate) fn version_key(folder: &Path) -> String {
+    let pending = folder.join(".pending");
+    if pending.join("app/index.html").exists() {
+        let made = std::fs::metadata(&pending)
+            .and_then(|m| m.created().or_else(|_| m.modified()))
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_nanos());
+        return format!("pending-{made}");
+    }
     std::fs::read_to_string(folder.join("version.json"))
         .ok()
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
@@ -123,6 +134,22 @@ mod tests {
         std::fs::write(d.join("root/a.txt"), "a").unwrap();
         std::fs::write(d.join("outside/secret.txt"), "s").unwrap();
         d
+    }
+
+    #[test]
+    fn unsaved_code_does_not_inherit_grants() {
+        let d = tmp("pending");
+        let f = d.join("root");
+        std::fs::write(f.join("version.json"), r#"{"t":1}"#).unwrap();
+        grant(&f, &[("system", json!(true))]).unwrap();
+        assert_eq!(state(&f, "system"), Grant::Yes);
+        // A change is waiting: its code runs, and must ask again.
+        std::fs::create_dir_all(f.join(".pending/app")).unwrap();
+        std::fs::write(f.join(".pending/app/index.html"), "x").unwrap();
+        assert_eq!(state(&f, "system"), Grant::Stale);
+        // Discarded: the saved version's grant holds again.
+        std::fs::remove_dir_all(f.join(".pending")).unwrap();
+        assert_eq!(state(&f, "system"), Grant::Yes);
     }
 
     #[test]
@@ -251,6 +278,9 @@ mod tests {
             &home.join("Library/Application Support/OpenAs"),
             &app
         ));
+        assert!(too_wide(Path::new("/Applications"), &app));
+        assert!(too_wide(&home.join("Applications"), &app));
+        assert!(too_wide(&home.join("Applications/Tea Timer.app"), &app));
         assert!(!too_wide(&home.join("Downloads"), &app));
         assert!(!too_wide(&home.join("Documents/Invoices"), &app));
         let icloud = home.join("Library/Mobile Documents/com~apple~CloudDocs");

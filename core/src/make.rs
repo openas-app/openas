@@ -381,19 +381,9 @@ pub fn draft_dir(id: &str) -> Result<PathBuf> {
 fn free_name(name: &str, folder: &Path) -> String {
     let taken = |n: &str| {
         let app = paths::install_dir().join(format!("{n}.app"));
-        if !app.exists() {
-            return false;
-        }
-        let owner = plist::Value::from_file(app.join("Contents/Info.plist"))
-            .ok()
-            .and_then(|v| {
-                v.as_dictionary()
-                    .and_then(|d| d.get("OAAppFolder"))
-                    .and_then(|f| f.as_string())
-                    .map(PathBuf::from)
-            });
-        owner.as_deref() != Some(folder)
+        app.exists() && !install::owned_by(&app, folder)
     };
+    let name = &install::clean_name(name);
     let mut n = name.to_string();
     let mut i = 2;
     while taken(&n) {
@@ -405,8 +395,7 @@ fn free_name(name: &str, folder: &Path) -> String {
 
 /// Makes a draft a real app: its own folder, installed, with this name.
 pub fn install_draft(dir: &Path, name: &str) -> Result<AppInfo> {
-    let name = name.trim();
-    let name = if name.is_empty() { "New App" } else { name };
+    let name = &install::clean_name(name);
     let made: Value = std::fs::read_to_string(dir.join("draft.json"))
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
@@ -448,7 +437,9 @@ pub fn allow_network_draft(dir: &Path) -> Result<Vec<String>> {
     check_folder(dir)
 }
 
-/// Drafts nobody installed (a crash, a closed window) go after a day.
+/// Leftovers nobody installed (a crash, a closed window) go after a day. A
+/// draft from the step-wise builder (it has making.json) is on OpenAs's shelf,
+/// finished or not, and stays until the person saves or discards it.
 pub fn sweep_drafts() {
     for e in std::fs::read_dir(paths::apps())
         .into_iter()
@@ -462,7 +453,11 @@ pub fn sweep_drafts() {
             .ok()
             .and_then(|t| t.elapsed().ok())
             .is_some_and(|d| d.as_secs() > 86_400);
-        if (n.starts_with(".draft-") || n.starts_with(".stage-") || n.starts_with(".new-")) && old {
+        let on_shelf = n.starts_with(".draft-") && e.path().join("making.json").exists();
+        if (n.starts_with(".draft-") || n.starts_with(".stage-") || n.starts_with(".new-"))
+            && old
+            && !on_shelf
+        {
             let _ = std::fs::remove_dir_all(e.path());
         }
     }
@@ -646,8 +641,14 @@ pub fn restore(app: &str, version: u64) -> Result<()> {
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
         .and_then(|v| v.get("made_by").and_then(Value::as_str).map(str::to_string))
         .unwrap_or_else(|| "An earlier version".into());
-    snapshot(&folder)?;
-    put_back(&folder, &dir)?;
+    // A copy first: keeping the current version prunes the oldest one, which
+    // may be the one being restored.
+    let aside = history(&folder).join(format!(".restoring-{version}"));
+    let _ = std::fs::remove_dir_all(&aside);
+    copy_tree(&dir, &aside)?;
+    let done = snapshot(&folder).and_then(|_| put_back(&folder, &aside));
+    let _ = std::fs::remove_dir_all(&aside);
+    done?;
     set_label(
         &folder,
         &format!("Back to: {}", label.trim_start_matches("Back to: ")),
@@ -928,6 +929,8 @@ pub fn create_from(html: &str, svg: Option<&str>, source: &str) -> Result<Outcom
     }
     let id = unique_id(&name);
     let folder = paths::apps().join(&id);
+    let name = free_name(&name, &folder);
+    info.name = name.clone();
     std::fs::rename(&tmp, &folder)?;
     let svg = svg
         .filter(|s| s.contains("<svg"))
@@ -1035,6 +1038,26 @@ mod tests {
             html(22)
         );
         assert_eq!(versions("notes").unwrap()[0]["label"], "change 22");
+        // The oldest kept version can be restored too, though keeping the
+        // current one prunes it from the list.
+        let v = versions("notes").unwrap();
+        let oldest = v.last().unwrap();
+        let (n, label) = (
+            oldest["version"].as_u64().unwrap(),
+            oldest["label"].as_str().unwrap().to_string(),
+        );
+        let want = label
+            .trim_start_matches("change ")
+            .parse::<usize>()
+            .map(html)
+            .ok();
+        restore("notes", n).unwrap();
+        if let Some(want) = want {
+            assert_eq!(
+                std::fs::read_to_string(folder.join("app/index.html")).unwrap(),
+                want
+            );
+        }
         std::env::remove_var("OPENAS_ROOT");
         let _ = std::fs::remove_dir_all(root);
     }

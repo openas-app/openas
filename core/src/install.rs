@@ -177,6 +177,57 @@ pub fn cdhash(app: &Path) -> Option<String> {
         .find_map(|l| l.strip_prefix("CDHash=").map(str::to_string))
 }
 
+/// The name an app's bundle gets: no path characters, no invisible or control
+/// characters, no leading dot, at most 60 characters.
+pub fn clean_name(name: &str) -> String {
+    let invisible = |c: char| {
+        c.is_control()
+            || matches!(
+                c,
+                '\u{00AD}'
+                    | '\u{034F}'
+                    | '\u{061C}'
+                    | '\u{115F}'
+                    | '\u{1160}'
+                    | '\u{17B4}'
+                    | '\u{17B5}'
+                    | '\u{180E}'
+                    | '\u{3164}'
+                    | '\u{FEFF}'
+                    | '\u{FFA0}'
+            )
+            || ('\u{200B}'..='\u{200F}').contains(&c)
+            || ('\u{202A}'..='\u{202E}').contains(&c)
+            || ('\u{2060}'..='\u{206F}').contains(&c)
+            || ('\u{FE00}'..='\u{FE0F}').contains(&c)
+    };
+    let n: String = name
+        .chars()
+        .filter(|&c| !matches!(c, '/' | ':' | '\\') && !invisible(c))
+        .take(60)
+        .collect();
+    let n = n.trim().trim_start_matches('.').trim();
+    if n.is_empty() {
+        "New App".into()
+    } else {
+        n.into()
+    }
+}
+
+/// Whether an installed bundle belongs to the app kept in `folder`.
+pub fn owned_by(app: &Path, folder: &Path) -> bool {
+    let canon = |p: &Path| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    plist::Value::from_file(app.join("Contents/Info.plist"))
+        .ok()
+        .and_then(|v| {
+            v.as_dictionary()
+                .and_then(|d| d.get("OAAppFolder"))
+                .and_then(|f| f.as_string())
+                .map(PathBuf::from)
+        })
+        .is_some_and(|owner| owner == folder || canon(&owner) == canon(folder))
+}
+
 pub fn install(folder: &Path, app_id: &str, name: &str, svg: &str) -> Result<PathBuf> {
     install_as(folder, app_id, name, svg, false)
 }
@@ -199,12 +250,15 @@ pub fn install_as(
     }
     let dest_dir = paths::install_dir();
     std::fs::create_dir_all(&dest_dir)?;
-    let safe_name: String = name
-        .chars()
-        .filter(|c| !matches!(c, '/' | ':' | '\\'))
-        .collect();
+    let safe_name = clean_name(name);
     let app = dest_dir.join(format!("{safe_name}.app"));
     if app.exists() {
+        // Only ever replace this app's own bundle, never another app of that name.
+        if !owned_by(&app, folder) {
+            bail!(
+                "An app called \u{201c}{safe_name}\u{201d} is already in your Applications folder"
+            );
+        }
         std::fs::remove_dir_all(&app)?;
     }
     run(Command::new("cp").arg("-R").arg(&runner).arg(&app))?;
@@ -318,4 +372,40 @@ pub fn install_as(
         .arg(&app)
         .output();
     Ok(app)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_lose_path_and_invisible_characters() {
+        assert_eq!(clean_name("OpenAs:"), "OpenAs");
+        assert_eq!(clean_name("a/b\\c"), "abc");
+        assert_eq!(clean_name("Open\u{200B}As"), "OpenAs");
+        assert_eq!(clean_name("  ..hidden "), "hidden");
+        assert_eq!(clean_name("/:"), "New App");
+        assert_eq!(clean_name(&"x".repeat(80)).len(), 60);
+        assert_eq!(clean_name("Tea Timer"), "Tea Timer");
+    }
+
+    #[test]
+    fn only_an_apps_own_bundle_is_its_own() {
+        let tmp = std::env::temp_dir().join(format!("oa-owned-{}", std::process::id()));
+        let app = tmp.join("X.app/Contents");
+        std::fs::create_dir_all(&app).unwrap();
+        let mut d = plist::Dictionary::new();
+        d.insert(
+            "OAAppFolder".into(),
+            plist::Value::String("/x/apps/mine".into()),
+        );
+        plist::Value::Dictionary(d)
+            .to_file_xml(app.join("Info.plist"))
+            .unwrap();
+        assert!(owned_by(&tmp.join("X.app"), Path::new("/x/apps/mine")));
+        assert!(!owned_by(&tmp.join("X.app"), Path::new("/x/apps/other")));
+        // Not an OpenAs app at all.
+        assert!(!owned_by(&tmp.join("Nope.app"), Path::new("/x/apps/mine")));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }

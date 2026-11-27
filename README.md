@@ -25,6 +25,8 @@ You need Rust ([rustup.rs](https://rustup.rs)) and Apple's command line tools
     git clone https://github.com/openas-app/openas && cd openas && ./install.sh
 
 The first build takes a few minutes. Openas then opens from `~/Applications`.
+It keeps using the folder you cloned, so leave that folder where it is (and
+don't `cargo clean` it); after moving it, run `./install.sh` again.
 
 ## First app
 
@@ -39,8 +41,9 @@ The first build takes a few minutes. Openas then opens from `~/Applications`.
    notes while it builds, or stop it. At the end, try it and choose **Save as App**
    or **Discard**.
 4. **Use it.** It's in your Applications folder like any other app.
-5. **Change it.** Open the column on the right of the app and ask for a change. Every
-   version is kept; go back to any of them. Your app's data is never rewritten.
+5. **Change it.** Open the column on the right of the app and ask for a change. The
+   last 20 versions are kept; go back to any of them. Going back changes the app's
+   code, not what it has saved, and a change never rewrites your app's data.
 
 What an app costs, measured on real builds:
 
@@ -65,14 +68,22 @@ build that goes wrong can't keep spending. Models on your Mac have no limit.
 There are three levels (details and limits in [SECURITY.md](SECURITY.md)):
 
 - **Default: what a web page can do.** The internet over https, the camera,
-  microphone and screen (macOS asks you first), files you pick or drop in. Code always
-  comes from the app's own folder, never from the web.
+  microphone and screen (macOS asks you first), files you pick or drop in. An app's
+  files load from its own folder and scripts from other sites are blocked, but like
+  any web page online it can still download code and run it. For an app you don't
+  trust, turn off **Allow Internet Access** in its menu.
 - **App permissions, asked when the app needs them:** notifications, a menu bar item,
   staying on top, global keyboard shortcuts, and one folder you choose.
-- **Full access to your Mac:** running programs and reading or changing any file.
-  Asked in its own warning, and only when an app really needs it.
+- **Full access to your Mac:** running programs and reading or changing any file,
+  which includes reading your provider key from the Keychain. Asked in its own
+  warning, and only when an app really needs it.
 
-Permissions belong to a version of the app: after any change, it asks again.
+Permissions belong to a version of the app: after any change, it asks again, also
+while you try a change before saving it.
+
+**What your model sees.** Your description, the app's code, and, when you change
+an app, screenshots and test results of it running with its saved data. All of it
+goes only to the model provider you chose.
 
 ## How it works
 
@@ -119,13 +130,22 @@ An app is a plain folder in `~/Library/Application Support/OpenAs/apps/`:
 
     app/            the app's code (HTML, CSS, JavaScript)
     data/           what the app saves; changes never rewrite it
-    history/<n>/    every earlier version
+    history/<n>/    the last 20 versions
     icon.svg  app.json  grants.json  version.json
 
 ## Testing without touching your apps
 
 `OPENAS_ROOT`, `OPENAS_INSTALL_DIR` and `OPENAS_ID_PREFIX` give a separate setup;
 installed copies carry them in their bundle.
+
+## Uninstall
+
+1. Delete `OpenAs.app` and the apps it made from `~/Applications` (each made app
+   has `OAAppFolder` in its `Info.plist`).
+2. Delete `~/Library/Application Support/OpenAs` (the apps' code, data and
+   versions, and the spending record).
+3. In Keychain Access, delete the items named `OpenAs` (your provider keys).
+4. Delete the folder you cloned.
 
 ## Contributing
 

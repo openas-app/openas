@@ -111,6 +111,21 @@ const BUILD_LOCK: &str = "build.lock";
 pub(crate) fn settle(ws: &Path) {
     let p = ws.join("making.json");
     let mut m = read_json(&p);
+    // A Save or Discard nobody picked up (its process was gone) would keep
+    // both disabled; after a moment with no build alive, it's forgotten.
+    if m["phase"] == "done" && !build_alive(ws, &m) {
+        for ext in ["keep", "discard"] {
+            let f = ws.with_extension(ext);
+            let old = std::fs::metadata(&f)
+                .and_then(|x| x.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .is_some_and(|d| d.as_secs() > 10);
+            if old {
+                let _ = std::fs::remove_file(f);
+            }
+        }
+    }
     if !matches!(
         m["phase"].as_str(),
         Some("planning" | "building" | "checking")
@@ -125,7 +140,7 @@ pub(crate) fn settle(ws: &Path) {
     }
 }
 
-fn build_alive(ws: &Path, m: &Value) -> bool {
+pub(crate) fn build_alive(ws: &Path, m: &Value) -> bool {
     match std::fs::OpenOptions::new()
         .write(true)
         .open(ws.join(BUILD_LOCK))

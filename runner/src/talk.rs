@@ -88,9 +88,11 @@ pub fn talk_choose(
         return Err("not allowed".into());
     }
     if !save {
-        // A build that stopped or failed has no process waiting for the
-        // choice: throw the draft away here.
-        if build_ended(&me.folder) {
+        // A build that stopped or failed, or one whose waiting process is
+        // gone, has nobody to tell: throw the draft away here.
+        let waiting =
+            crate::who::build_alive(&me.folder, &read_json(&me.folder.join("making.json")));
+        if build_ended(&me.folder) || !waiting {
             std::fs::write(
                 me.folder.with_extension("moved"),
                 json!({ "discarded": true }).to_string(),
@@ -105,6 +107,23 @@ pub fn talk_choose(
         return Err("it didn't finish: continue it first".into());
     }
     std::fs::write(me.folder.with_extension("keep"), name).map_err(|e| e.to_string())?;
+    // Finished, but the process that waited for this choice is gone (a
+    // restart, a crash): start one that picks the choice up and installs.
+    if !crate::who::build_alive(&me.folder, &read_json(&me.folder.join("making.json"))) {
+        let helper = me
+            .helper
+            .clone()
+            .ok_or("this window doesn't know where OpenAs is")?;
+        std::process::Command::new(&helper)
+            .arg("make-run")
+            .arg(&me.folder)
+            .envs(me.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("couldn't start OpenAs ({}): {e}", helper.display()))?;
+    }
     Ok(())
 }
 

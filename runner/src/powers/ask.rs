@@ -311,6 +311,14 @@ pub fn too_wide(p: &Path, app_folder: &Path) -> bool {
         || p.starts_with("/bin")
         || p.starts_with("/sbin")
         || p.starts_with("/etc")
+        || p.starts_with("/Applications")
+        || p.starts_with(home.join("Applications"))
+        // Where this app and its siblings are installed (a setup may use
+        // another folder than ~/Applications).
+        || bundle
+            .as_deref()
+            .and_then(Path::parent)
+            .is_some_and(|dir| p.starts_with(dir))
         || data_root.starts_with(p)
         || p.starts_with(&data_root)
         || bundle

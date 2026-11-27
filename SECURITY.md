@@ -10,19 +10,24 @@ folder of HTML, CSS and JavaScript in the system's WebKit. It has three levels:
 
 1. **What a web page can do (the default).** The internet over https, the
    camera, microphone and screen (macOS asks first), and files the person picks
-   or drops in. Code is served only from the app's own folder: a content
-   security policy blocks scripts from anywhere else.
+   or drops in. The app's files are served only from its own folder, and a
+   content security policy blocks script files from anywhere else. It doesn't
+   stop a page from downloading code and running it (`eval`), as any web page
+   online can; turning off **Allow Internet Access** in the app's menu limits
+   what an app can reach (a content security policy, not a firewall).
 2. **App permissions, asked when the app needs them:** notifications, a menu
    bar item, staying on top, global keyboard shortcuts, and one folder the
    person chooses. File calls are confined to that folder in Rust: paths are
    relative, `..` is refused, and every path is resolved through symlinks and
    must still be inside it.
-3. **Full access:** running programs and reading or changing any file. Asked
-   in its own warning, only when the app asks for it.
+3. **Full access:** running programs and reading or changing any file, which
+   includes asking the Keychain for your provider key (see below). Asked in its
+   own warning, only when the app asks for it.
 
 Permissions are stored next to the app's code, never inside it, so the model
 can't grant them. They belong to one version of the app: after any change, the
-app asks again.
+app asks again. A change you're trying out before saving it counts as its own
+version, so it asks again too.
 
 ## Shared apps
 
@@ -49,11 +54,23 @@ and a modified copy of an app are refused.
 This keeps apps from acting on each other. It is not protection from malware
 already running as your user, which could do anything you can.
 
-## Keys and spending
+## Keys, data and spending
 
 Provider keys are kept in the macOS Keychain and sent only to the provider you
-chose. Nothing goes to a server of ours; there isn't one. Each build has a
-spending limit per app and in total.
+chose. Nothing goes to a server of ours; there isn't one. OpenAs stores keys
+through Apple's `security` tool, so any program running as you, including an
+app you gave full access, can read them without a prompt. While a key is being
+saved it is briefly visible in the process list.
+
+What goes to the model provider: your description, the app's code, and, while
+building or changing, screenshots and test results of the app running in a
+simulated desktop. When you change an app, that test run uses the app's saved
+data, so parts of it can appear in what the model sees.
+
+The builder's simulated desktop serves only the app's own files and uses the
+same content security policy and Internet setting as the real app.
+
+Each build has a spending limit per app and in total.
 
 ## Reporting a problem
 

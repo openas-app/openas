@@ -215,6 +215,23 @@ pub fn make_run(ws: &Path) -> Result<()> {
         .write(true)
         .open(ws.join(BUILD_LOCK))?;
     _alive.lock()?;
+    let id = ws
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    // Finished already, but the process that waited for the choice is gone
+    // (a restart, a crash): wait for Save as App or Discard again, no rebuild.
+    let made: Value = std::fs::read_to_string(ws.join("making.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    if made["phase"] == "done"
+        && !ws.join("continue.json").exists()
+        && ws.join("app/index.html").exists()
+    {
+        let name = made["name"].as_str().unwrap_or("New App").to_string();
+        return keep_or_discard(ws, &name);
+    }
     // Carrying on after a stop or a failure: what to do next, said once.
     // `continue.json`: {"request": for the model, "shown": for the person}.
     let cont = ws.join("continue.json");
@@ -231,16 +248,18 @@ pub fn make_run(ws: &Path) -> Result<()> {
             (r.clone(), r)
         }
     };
-    let id = ws
-        .file_name()
-        .map(|f| f.to_string_lossy().into_owned())
-        .unwrap_or_default();
     let say = |s: &str| eprintln!("{s}");
     let f = super::turn::run_shown(ws, ws, &request, &shown, &id, &make::Events::lines(&say))?;
+    keep_or_discard(ws, &f.name)
+}
+
+/// Waits for the person's choice on a finished draft, then installs it (and
+/// opens it) or throws it away.
+fn keep_or_discard(ws: &Path, made_name: &str) -> Result<()> {
     let name = if std::env::var("OPENAS_AUTO_KEEP").is_ok() {
-        f.name.clone()
+        made_name.to_string()
     } else {
-        match wait_for_choice(ws, &f.name) {
+        match wait_for_choice(ws, made_name) {
             Choice::Save(n) => n,
             Choice::Discard => {
                 std::fs::write(

@@ -13,19 +13,29 @@ let w = a.count > 3 ? Double(a[3]) ?? 1200 : 1200, h = a.count > 4 ? Double(a[4]
 let script = a.count > 5 && !a[5].isEmpty ? (try? String(contentsOfFile: a[5], encoding: .utf8)) : nil
 let dark = a.count > 6 && a[6] == "dark"
 
+// The app's own files and nothing else: a path that leaves the folder (`..`,
+// encoded or not, or a link pointing out) is refused, like the real runtime.
 final class Files: NSObject, WKURLSchemeHandler {
     let root: URL
-    init(_ r: URL) { root = r }
+    let base: String
+    let csp: String
+    init(_ r: URL, csp: String) {
+        root = r.standardizedFileURL.resolvingSymlinksInPath()
+        base = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        self.csp = csp
+    }
     func webView(_ w: WKWebView, start t: WKURLSchemeTask) {
-        var path = t.request.url!.path
+        let raw = URLComponents(url: t.request.url!, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? ""
+        var path = raw.removingPercentEncoding ?? ""
         if path == "/" || path.isEmpty { path = "/index.html" }
-        let f = root.appendingPathComponent(path)
-        guard let d = try? Data(contentsOf: f) else { t.didFailWithError(URLError(.fileDoesNotExist)); return }
+        let f = root.appendingPathComponent(path).standardizedFileURL.resolvingSymlinksInPath()
+        guard !path.split(separator: "/").contains(".."), f.path.hasPrefix(base),
+              let d = try? Data(contentsOf: f) else { t.didFailWithError(URLError(.fileDoesNotExist)); return }
         let types = ["html": "text/html", "js": "text/javascript", "mjs": "text/javascript", "css": "text/css",
                      "svg": "image/svg+xml", "png": "image/png", "jpg": "image/jpeg", "json": "application/json",
                      "woff2": "font/woff2", "woff": "font/woff", "wasm": "application/wasm"]
         let type = types[f.pathExtension.lowercased()] ?? "application/octet-stream"
-        t.didReceive(HTTPURLResponse(url: t.request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": type])!)
+        t.didReceive(HTTPURLResponse(url: t.request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": type, "Content-Security-Policy": csp])!)
         t.didReceive(d); t.didFinish()
     }
     func webView(_ w: WKWebView, stop t: WKURLSchemeTask) {}
@@ -46,7 +56,14 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 app.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
 let cfg = WKWebViewConfiguration()
-let files = Files(root)
+// The same content policy as the real runtime (runner/src/serve.rs `policy`),
+// including the app's Internet switch.
+let network = (try? JSONSerialization.jsonObject(with: Data(contentsOf: root.deletingLastPathComponent().appendingPathComponent("permissions.json")))
+    as? [String: Any])?["network"] as? Bool ?? true
+let csp = network
+    ? "default-src 'self' app: data: blob: https:; script-src 'self' app: 'unsafe-inline' 'unsafe-eval'; frame-src 'self' app: data: blob:; style-src 'self' app: 'unsafe-inline' https:; img-src 'self' app: data: blob: https:; font-src 'self' app: data: https:; connect-src 'self' https: wss:; media-src 'self' app: data: blob: https:; base-uri 'none'"
+    : "default-src 'self' app: data: blob:; script-src 'self' app: 'unsafe-inline' 'unsafe-eval'; style-src 'self' app: 'unsafe-inline'; img-src 'self' app: data: blob:; font-src 'self' app: data:; connect-src 'self'; media-src 'self' app: data: blob:; form-action 'none'; base-uri 'none'"
+let files = Files(root, csp: csp)
 cfg.setURLSchemeHandler(files, forURLScheme: "app")
 let log = Log()
 cfg.userContentController.add(log, name: "log")
