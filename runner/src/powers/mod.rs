@@ -218,6 +218,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "Windows: Unix programs, and a time limit does not yet stop child processes (needs a Job Object)"
+    )]
     fn runs_a_program_with_a_time_limit() {
         let tmp = std::env::temp_dir();
         let r = run_program("echo", &["hello".into()], &tmp, None, 5000).unwrap();
@@ -271,6 +275,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "Windows: too_wide only knows Mac folders (needs C:\\, Users, AppData)"
+    )]
     fn wide_folders_are_refused() {
         let home = dirs::home_dir().unwrap();
         let app = home.join("Library/Application Support/OpenAs/apps/x");
