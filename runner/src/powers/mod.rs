@@ -34,6 +34,7 @@ pub const KNOWN: &[(&str, &str)] = &[
         "Hear its keyboard shortcuts while you're in other apps",
     ),
     ("full", "Full access to your Mac"),
+    ("internet", net::LINE),
 ];
 
 pub(crate) const MAX_READ: u64 = 8 << 20;
@@ -116,11 +117,13 @@ pub(crate) fn grant(folder: &Path, set: &[(&str, Value)]) -> Result<(), String> 
 pub mod ask;
 pub mod extras;
 pub mod files;
+pub mod net;
 
 // The parts share their helpers through here.
 pub(crate) use ask::*;
 pub(crate) use extras::*;
 pub(crate) use files::*;
+pub(crate) use net::*;
 
 #[cfg(test)]
 mod tests {

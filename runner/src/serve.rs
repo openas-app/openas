@@ -55,7 +55,7 @@ pub(crate) const CHECK: &str = r#"
     else add(e.message + " (line " + e.lineno + ")");
   }, true);
   addEventListener("unhandledrejection", e => add("Unhandled: " + (e.reason && e.reason.message || e.reason)));
-  addEventListener("securitypolicyviolation", e => add("It tried to load " + (e.blockedURI || "something") + ", which isn't allowed: apps may use https and wss addresses, and files in their own folder."));
+  addEventListener("securitypolicyviolation", e => add("It tried to reach " + (e.blockedURI || "something") + ", which isn't allowed: an app loads files from its own folder, and uses the internet (https and wss only) after app.permissions.request(['internet']) says yes."));
   for (const k of ["alert", "confirm", "prompt"]) window[k] = () => { R.dialogs.push(k); return k === "confirm" ? false : null; };
   const done = () => {
     const b = document.body;
@@ -69,9 +69,9 @@ pub(crate) const CHECK: &str = r#"
 })();
 "#;
 
-/// What a page may load. Like a web page, an app may use the internet unless
-/// the person turned it off from the app's menu (never the model); OpenAs'
-/// own pages never do.
+/// What a page may load. An app reaches the internet only once the person
+/// allowed it (`powers::net`), never because the model wrote so; OpenAs' own
+/// pages never do.
 /// `ipc:` and `ipc.localhost` are how the page talks to the Runner.
 pub(crate) fn policy(network: bool) -> String {
     let ipc = "ipc: http://ipc.localhost";
@@ -84,14 +84,6 @@ pub(crate) fn policy(network: bool) -> String {
                  style-src 'self' app: 'unsafe-inline'; img-src 'self' app: data: blob:; font-src 'self' app: data:; \
                  connect-src 'self' {ipc}; media-src 'self' app: data: blob:; form-action 'none'; base-uri 'none'")
     }
-}
-
-pub(crate) fn network_allowed(folder: &Path) -> bool {
-    std::fs::read_to_string(folder.join("permissions.json"))
-        .ok()
-        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
-        .and_then(|v| v.get("network").and_then(Value::as_bool))
-        .unwrap_or(true)
 }
 
 pub(crate) fn mime(path: &Path) -> &'static str {

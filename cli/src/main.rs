@@ -43,6 +43,10 @@ fn setup() -> Result<()> {
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // Before anything can make an app under the new rule.
+    if let Err(e) = make::migrate_internet() {
+        eprintln!("couldn't carry the apps' internet setting over: {e}");
+    }
     match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
         // Builds an app with the step-wise builder (same limits as the window)
         // and installs it.

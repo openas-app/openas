@@ -25,6 +25,9 @@ pub(crate) fn folder_name(p: &str) -> String {
 pub fn perm_has(name: String, webview: tauri::Webview, who: State<Who>) -> Result<Value, String> {
     let me = who.me(&webview)?;
     only_app(&webview, &me)?;
+    if name == "internet" {
+        return Ok(json!(online(&me)));
+    }
     if me.check.is_some() || me.making {
         return Ok(json!(false));
     }
@@ -47,8 +50,21 @@ pub async fn perm_request(
     let me = who.me(&webview)?;
     only_app(&webview, &me)?;
     let mut out = serde_json::Map::new();
+    // A draft tried in OpenAs gets the internet when it asks, so the person
+    // can judge the real thing; the installed app asks them at first launch.
+    if me.making && me.check.is_none() && names.iter().any(|n| n == "internet") {
+        let mark = preview_mark(&me.folder);
+        if !mark.exists() {
+            let _ = std::fs::write(&mark, "");
+            reload(&webview, true);
+        }
+        out.insert("internet".into(), json!(true));
+    }
     if me.check.is_some() || me.making {
-        for n in &names {
+        for n in names
+            .iter()
+            .filter(|n| *n != "internet" || me.check.is_some())
+        {
             out.insert(n.clone(), json!(false));
         }
         return Ok(Value::Object(out));
@@ -66,6 +82,10 @@ pub async fn perm_request(
                 out.insert(n.clone(), json!(false));
             }
             Some(("folder", _)) | Some(("full", _)) => {}
+            Some(("internet", _)) if net_state(&folder) == Grant::Yes => {
+                out.insert(n.clone(), json!(true));
+            }
+            Some(("internet", _)) => plain.push(n.clone()),
             Some((k, _)) if state(&folder, k) == Grant::Yes => {
                 out.insert(n.clone(), json!(true));
             }
@@ -98,7 +118,13 @@ pub async fn perm_request(
             .iter()
             .map(|n| format!("• {}", KNOWN.iter().find(|(k, _)| k == n).unwrap().1))
             .collect();
-        let changed = plain.iter().any(|n| state(&folder, n) == Grant::Stale);
+        let changed = plain.iter().any(|n| {
+            if n == "internet" {
+                net_state(&folder) == Grant::Stale
+            } else {
+                state(&folder, n) == Grant::Stale
+            }
+        });
         let mut text = list.join("\n");
         if !why.is_empty() {
             text = format!("{text}\n\n“{why}”");
@@ -124,12 +150,23 @@ pub async fn perm_request(
             MessageDialogResult::Custom(s) => s == "Allow",
             _ => false,
         };
-        let set: Vec<(&str, Value)> = plain.iter().map(|n| (n.as_str(), json!(yes))).collect();
-        if yes {
+        let set: Vec<(&str, Value)> = plain
+            .iter()
+            .filter(|n| *n != "internet")
+            .map(|n| (n.as_str(), json!(yes)))
+            .collect();
+        if yes && !set.is_empty() {
             grant(&folder, &set)?;
         }
         for n in &plain {
             out.insert(n.clone(), json!(yes));
+        }
+        // The internet takes a fresh page under the new content policy.
+        if plain.iter().any(|n| n == "internet") {
+            set_net(&folder, yes)?;
+            if yes {
+                apply(&app, true);
+            }
         }
     }
     Ok(Value::Object(out))

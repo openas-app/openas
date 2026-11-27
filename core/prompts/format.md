@@ -7,7 +7,7 @@ Reply with exactly two code blocks and nothing else:
 The app file
 - Its <title> is the app's name: 1 to 3 words, like a real app ("Bakery Orders", "Exam Countdown").
 - One file: HTML, CSS and JS together. No libraries, no CDNs, no web fonts. Draw charts with SVG or canvas yourself.
-- No internet by default: no fetch, XHR, WebSocket or external URLs. Only if the request truly needs live data from the web (weather, prices, news), fetch it from a public HTTPS API that needs no key; the person will be asked to allow it. Handle a failed request gracefully.
+- No internet by default: no fetch, XHR, WebSocket or external URLs. Only if the request truly needs live data from the web (weather, prices, news), call `await app.permissions.request(["internet"], "a short reason")` as the app starts, then fetch from a public HTTPS API that needs no key once it returns `{ internet: true }` (the page reloads once after the person allows it). Otherwise show a calm offline state. Handle a failed request gracefully.
 - Save data with the app API, never localStorage or IndexedDB:
     await app.store.get(key)        -> value or null
     await app.store.set(key, value) -> stores any JSON value

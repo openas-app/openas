@@ -103,6 +103,7 @@ pub fn save_change(app: &str) -> Result<()> {
     if !pending.join("app/index.html").exists() {
         bail!("there are no edits to save");
     }
+    let tried_online = make::net_tried(&folder);
     make::snapshot(&folder)?;
     let old = folder.join(".app-old");
     let _ = std::fs::remove_dir_all(&old);
@@ -120,6 +121,7 @@ pub fn save_change(app: &str) -> Result<()> {
         std::fs::copy(pending.join("window.json"), folder.join("window.json"))?;
     }
     std::fs::remove_dir_all(&pending)?;
+    make::net_follow_save(&folder, tried_online)?;
     Ok(())
 }
 

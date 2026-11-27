@@ -29,9 +29,7 @@ impl App {
 }
 
 pub(crate) struct NetToggle {
-    pub(crate) flag: Arc<std::sync::atomic::AtomicBool>,
     pub(crate) item: tauri::menu::CheckMenuItem<tauri::Wry>,
-    pub(crate) folder: PathBuf,
 }
 
 pub(crate) struct Store {

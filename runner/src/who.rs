@@ -260,7 +260,16 @@ pub(crate) fn show(app: &AppHandle, id: &str) -> Result<(), String> {
     if let Some(old) = app.get_webview("app") {
         let _ = old.close();
     }
-    let ab = tauri::webview::WebviewBuilder::new("app", draft_url())
+    let ab = tauri::webview::WebviewBuilder::new("app", draft_url());
+    // With no peer connections from the first page (a configuration of our
+    // own, so it keeps nothing between drafts itself).
+    #[cfg(target_os = "macos")]
+    let ab =
+        match crate::powers::no_peers_config(true, crate::powers::preview_mark(&folder).exists()) {
+            Some(c) => ab.with_webview_configuration(c),
+            None => ab,
+        };
+    let ab = ab
         .incognito(true)
         .initialization_script(bridge())
         .on_navigation(|u| {
@@ -268,7 +277,18 @@ pub(crate) fn show(app: &AppHandle, id: &str) -> Result<(), String> {
             own || matches!(u.scheme(), "about" | "data" | "blob")
         })
         .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
-        .on_download(|_, _| false);
+        .on_download(|_, _| false)
+        // No peer connections until the draft asked for the internet.
+        .on_page_load(|w, p| {
+            if matches!(p.event(), tauri::webview::PageLoadEvent::Started) {
+                let on = w
+                    .app_handle()
+                    .try_state::<Who>()
+                    .and_then(|who| who.shown())
+                    .is_some_and(|d| crate::powers::online(&d.app));
+                crate::powers::peer_connections(&w, on);
+            }
+        });
     let page = win
         .add_child(
             ab,
@@ -501,7 +521,12 @@ pub(crate) fn watch(app: AppHandle, save: MenuItem<tauri::Wry>, discard: MenuIte
             if reload_at.is_some_and(|t| t.elapsed() >= Duration::from_millis(900)) {
                 reload_at = None;
                 if let Some(a) = &view {
-                    let _ = a.eval("location.reload()");
+                    let on = a
+                        .app_handle()
+                        .try_state::<Who>()
+                        .and_then(|who| who.shown())
+                        .is_some_and(|d| crate::powers::online(&d.app));
+                    crate::powers::reload(a, on);
                 }
             }
         }
