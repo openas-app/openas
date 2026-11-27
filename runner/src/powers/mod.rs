@@ -168,6 +168,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn refuses_symlink_escapes() {
         let d = tmp("links");
         let r = d.join("root");

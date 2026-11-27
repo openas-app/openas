@@ -19,3 +19,6 @@ dirs = "7"
 regex = "1"
 resvg = "0.50"
 plist = "1"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }

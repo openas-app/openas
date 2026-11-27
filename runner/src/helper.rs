@@ -249,6 +249,8 @@ pub fn helper_stop(
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .get(&job)
     {
+        #[cfg(not(unix))]
+        let _ = j;
         #[cfg(unix)]
         if let Some(c) = j
             .lock()

@@ -26,10 +26,13 @@ pub(crate) fn ask(app: &AppHandle, save: bool) {
     // The dialog shows the app being saved, not OpenAs.
     let icon = me.folder.join("icon.svg");
     let icon = icon.exists().then(|| icon.to_string_lossy().into_owned());
-    let Ok(win) = talk.window().ns_window() else {
+    #[cfg(target_os = "macos")]
+    let Ok(win) = talk.window().ns_window().map(|w| w as usize) else {
         return;
     };
-    let win = win as usize;
+    // Windows: no native save sheet yet; the page's own answer path is used.
+    #[cfg(not(target_os = "macos"))]
+    let win = 0usize;
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
         let answer = move |name: Option<String>| {

@@ -209,14 +209,19 @@ pub fn run_program(
     use std::process::{Command, Stdio};
     const CAP: usize = 8 << 20;
     // Apps opened from the Finder get a bare PATH; give them the usual one.
-    let path = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
-    use std::os::unix::process::CommandExt;
-    let mut child = Command::new(program)
-        .args(args)
+    let mut cmd = Command::new(program);
+    cmd.args(args).current_dir(cwd);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.env(
+            "PATH",
+            "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        )
         // Its own process group, so a time limit stops everything it started.
-        .process_group(0)
-        .current_dir(cwd)
-        .env("PATH", path)
+        .process_group(0);
+    }
+    let mut child = cmd
         .stdin(if stdin.is_some() {
             Stdio::piped()
         } else {
@@ -271,7 +276,10 @@ pub fn run_program(
             // SAFETY: kill(2) takes no pointers. The child was started as
             // the leader of its own group (pgid = pid), so the negative pid
             // reaches it and everything it started, and nothing else.
-            unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL) };
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(-(child.id() as i32), libc::SIGKILL)
+            };
             let _ = child.kill();
             timed_out = true;
             break child.wait().ok();

@@ -123,6 +123,7 @@ pub fn manager_record() -> Option<Value> {
     serde_json::from_str(&std::fs::read_to_string(paths::root().join("manager.json")).ok()?).ok()
 }
 
+#[cfg(unix)]
 fn identify(s: &std::os::unix::net::UnixStream) -> Result<Caller> {
     let pid = peer_pid(s).ok_or_else(|| anyhow!("can't see who is calling"))?;
     let exe = pid_exe(pid).ok_or_else(|| anyhow!("can't see the caller's program"))?;
@@ -494,6 +495,15 @@ pub fn handle(caller: &Caller, req: &Value, ev: &make::Events) -> Result<Value> 
     }
 }
 
+/// Windows: the Helper's transport (a named pipe) and its caller check (the
+/// caller's exe and its hash) aren't written yet, so it refuses to start
+/// rather than answer callers it can't name.
+#[cfg(not(unix))]
+pub fn serve() -> Result<()> {
+    bail!("the Helper doesn't run on Windows yet")
+}
+
+#[cfg(unix)]
 pub fn serve() -> Result<()> {
     use std::os::unix::net::{UnixListener, UnixStream};
     let sock = paths::socket();
